@@ -10,8 +10,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-INFERENCE_VERSION = "V3-20260818"
-
 DTYPE = torch.float64
 REF_LEFT = -1.0
 REF_RIGHT = 1.0
@@ -101,44 +99,52 @@ def _validate_support(
     return left, right
 
 
-def estimate_support_from_sample_range(
+def sample_adaptive_working_interval(
     samples: Iterable[float],
-    coverage: float,
 ) -> Tuple[float, float]:
     """
-    Treat the observed sample range as `coverage` of the TOTAL
-    finite-support width, centered within that support.
+    Construct the automatic sample-adaptive working interval
 
-    Example: coverage=0.95 means
-        support_width = observed_range / 0.95.
+        A = x_min - R/(N-1),
+        B = x_max + R/(N-1),
 
-    This is a deterministic support-extension rule, not a
-    confidence interval and not a probability-content statement.
+    where R = x_max - x_min.
+
+    Equivalently,
+
+        B - A = ((N+1)/(N-1)) * R.
+
+    This is a uniform-reference working-interval rule. It is not
+    a confidence interval and should not be interpreted as a
+    general estimator of the mathematical support.
+
+    The construction is affine equivariant.
     """
     x = _as_1d_numpy(samples)
-    coverage = float(coverage)
+    n = int(x.size)
 
-    if not math.isfinite(coverage):
-        raise ValueError("coverage must be finite.")
-    if not (0.0 < coverage <= 1.0):
-        raise ValueError("coverage must satisfy 0 < coverage <= 1.")
+    if n < 2:
+        raise ValueError(
+            "At least two observations are required "
+            "to construct the automatic working interval."
+        )
 
     x_min = float(np.min(x))
     x_max = float(np.max(x))
-    width = x_max - x_min
+    observed_range = x_max - x_min
 
-    if width <= 0.0:
+    if observed_range <= 0.0:
         raise ValueError(
-            "Cannot estimate support from a zero-width sample range."
+            "Cannot construct an automatic working interval "
+            "from a zero-width sample range."
         )
 
-    center = 0.5 * (x_min + x_max)
-    half_support_width = 0.5 * width / coverage
+    margin = observed_range / float(n - 1)
 
     return _validate_support(
         (
-            center - half_support_width,
-            center + half_support_width,
+            x_min - margin,
+            x_max + margin,
         )
     )
 
