@@ -10,10 +10,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from inference import (
-    AmortizedKDE,
-    sample_adaptive_working_interval,
-)
+from inference import AmortizedKDE
 
 
 DENSITY_GRID_SIZE = 512
@@ -135,6 +132,55 @@ def read_uploaded_samples(uploaded_file) -> np.ndarray:
 
 def fmt(x: float) -> str:
     return f"{x:.6g}"
+
+
+def sample_adaptive_working_interval(
+    samples: np.ndarray,
+) -> tuple[float, float]:
+    """
+    Automatic working interval with c=1:
+
+        R = x_max - x_min
+        A = x_min - R/(N-1)
+        B = x_max + R/(N-1)
+
+    This is a uniform-reference, sample-size-adaptive working
+    interval. It is not a confidence interval or a general
+    estimator of mathematical support.
+    """
+    x = np.asarray(
+        samples,
+        dtype=np.float64,
+    )
+
+    if x.ndim != 1:
+        raise ValueError(
+            "samples must be one-dimensional."
+        )
+
+    n = int(x.size)
+
+    if n < 2:
+        raise ValueError(
+            "At least two observations are required."
+        )
+
+    x_min = float(np.min(x))
+    x_max = float(np.max(x))
+    observed_range = x_max - x_min
+
+    if observed_range <= 0.0:
+        raise ValueError(
+            "Cannot construct an automatic interval "
+            "from a zero-width sample range."
+        )
+
+    margin = observed_range / float(n - 1)
+
+    return (
+        x_min - margin,
+        x_max + margin,
+    )
 
 
 
