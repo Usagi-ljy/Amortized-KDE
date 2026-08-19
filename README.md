@@ -6,22 +6,17 @@ The deployed tool takes a one-dimensional sample, constructs five summary featur
 
 ## Online demo
 
-After deployment, replace the placeholder below with the public Streamlit URL:
-
-`https://<your-app-name>.streamlit.app`
+`https://amortized-kde.streamlit.app`
 
 ## Repository structure
 
 ```text
-amortized-kde/
-├── app.py
-├── inference.py
-├── gmm32_selector.pt
-├── requirements.txt
-├── README.md
-├── .gitignore
-└── example_data/
-    └── example_multicolumn_sample.csv
+app.py
+inference.py
+gmm32_selector.pt
+requirements.txt
+README.md
+example_multicolumn_sample.csv
 ```
 
 ## Method
@@ -42,16 +37,45 @@ The public implementation loads the EMA weights from the final GMM K = 32 checkp
 
 and on the reference support `[-1, 1]`. For a user-specified finite support `[A, B]`, the data are affinely mapped to `[-1, 1]`, the bandwidth is predicted on that scale, and the bandwidth and density are transformed back to the original scale.
 
-## Support options
+## Interval specification
 
-The web app supports four finite-support choices:
+The web app provides two interval choices.
 
-1. Known support `[A, B]` supplied by the user.
-2. Observed sample range treated as 90% of the total support width.
-3. Observed sample range treated as 95% of the total support width.
-4. Observed sample range treated as 99% of the total support width.
+### 1. Known finite support
 
-The 90%, 95%, and 99% options are deterministic support-extension rules. They are **not** confidence intervals and do **not** state that the observed sample range contains that percentage of probability mass.
+If the true finite support `[A, B]` is known, it can be supplied directly.
+
+### 2. Automatic sample-adaptive working interval
+
+Otherwise, let
+
+\[
+R=x_{\max}-x_{\min}.
+\]
+
+The app constructs
+
+\[
+A=x_{\min}-\frac{R}{N-1},
+\qquad
+B=x_{\max}+\frac{R}{N-1}.
+\]
+
+Equivalently,
+
+\[
+B-A=\frac{N+1}{N-1}R.
+\]
+
+This is a **uniform-reference, sample-size-adaptive working-interval rule**. Under a `Uniform(A,B)` reference model,
+
+\[
+E(R)=\frac{N-1}{N+1}(B-A),
+\]
+
+which motivates the expansion. The rule is affine equivariant.
+
+The automatic interval is **not** a confidence interval and should not be interpreted as a general estimator of the mathematical support. If scientifically meaningful finite support bounds are known, the known-support option should be preferred.
 
 ## Input formats
 
@@ -87,7 +111,7 @@ The app displays:
 
 - sample size;
 - predicted bandwidth on the original data scale;
-- effective finite support;
+- effective finite interval;
 - the estimated truncated Gaussian KDE;
 - optional technical details including the five selector features and a numerical integral check.
 
