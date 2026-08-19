@@ -12,7 +12,7 @@ import streamlit as st
 
 from inference import (
     AmortizedKDE,
-    estimate_support_from_sample_range,
+    sample_adaptive_working_interval,
 )
 
 
@@ -181,7 +181,7 @@ Given a one-dimensional sample, the method summarizes the sample using five feat
 mean, standard deviation, skewness, and kurtosis—and uses a neural selector trained across Gaussian-mixture
 density-estimation tasks to predict the KDE bandwidth directly, without performing a new bandwidth search
 for each dataset. The predicted bandwidth is then used to construct a truncated Gaussian kernel density
-estimate on the selected finite support.
+estimate on the selected finite interval.
 """
 )
 
@@ -275,31 +275,32 @@ if (
 
 
 # ============================================================
-# 2. Support
+# 2. Interval
 # ============================================================
 
 st.subheader(
-    "2. Specify support"
+    "2. Specify interval"
 )
 
-support_method = st.radio(
-    "Choose a support method",
+interval_method = st.radio(
+    "Choose an interval method",
     [
-        "Known support [A, B]",
-        "Sample range = 90% of support width",
-        "Sample range = 95% of support width",
-        "Sample range = 99% of support width",
+        "Known finite support [A, B]",
+        "Automatic sample-adaptive interval",
     ],
+    index=1,
 )
 
 support_left = None
 support_right = None
 support_note = ""
 
-if support_method == "Known support [A, B]":
-    c1, c2 = st.columns(
-        2
+if interval_method == "Known finite support [A, B]":
+    st.caption(
+        "Use this option when the finite support is known."
     )
+
+    c1, c2 = st.columns(2)
 
     with c1:
         support_left = st.number_input(
@@ -315,23 +316,15 @@ if support_method == "Known support [A, B]":
             format="%.6f",
         )
 
-    support_note = (
-        "User-specified finite support."
-    )
+    support_note = "User-specified known finite support."
 
 else:
-    coverage = {
-        "Sample range = 90% of support width": 0.90,
-        "Sample range = 95% of support width": 0.95,
-        "Sample range = 99% of support width": 0.99,
-    }[
-        support_method
-    ]
-
     st.caption(
-        f"The observed range is treated as {int(coverage * 100)}% "
-        "of the total support width and the support is extended "
-        "symmetrically. This is not a confidence interval."
+        "The automatic rule constructs a sample-size-adaptive "
+        "working interval from the observed minimum, maximum, "
+        "and range. It is a uniform-reference rule, not a "
+        "confidence interval or a general estimator of the "
+        "mathematical support."
     )
 
     if (
@@ -341,26 +334,45 @@ else:
     ):
         try:
             support_left, support_right = (
-                estimate_support_from_sample_range(
-                    samples,
-                    coverage=coverage,
-                )
+                sample_adaptive_working_interval(samples)
+            )
+
+            n_current = int(samples.size)
+            observed_range = float(
+                samples.max() - samples.min()
+            )
+            margin = (
+                observed_range
+                /
+                float(n_current - 1)
+            )
+
+            st.latex(
+                r"A=x_{\min}-\frac{R}{N-1},"
+                r"\qquad "
+                r"B=x_{\max}+\frac{R}{N-1}"
             )
 
             st.info(
-                "Effective support: "
+                "Automatic working interval: "
                 f"[{fmt(support_left)}, "
                 f"{fmt(support_right)}]"
             )
 
+            st.caption(
+                f"Observed range R = {fmt(observed_range)}; "
+                f"extension on each side = {fmt(margin)}."
+            )
+
             support_note = (
-                f"Sample range = {int(coverage * 100)}% "
-                "of support width."
+                "Automatic sample-adaptive working interval: "
+                "A = x_min - R/(N-1), "
+                "B = x_max + R/(N-1)."
             )
 
         except Exception as exc:
             st.warning(
-                f"Support cannot be estimated: {exc}"
+                f"Automatic interval cannot be constructed: {exc}"
             )
 
 
@@ -403,13 +415,13 @@ if st.button(
 
     if support_left is None or support_right is None:
         st.error(
-            "The support could not be determined."
+            "The interval could not be determined."
         )
         st.stop()
 
     if not float(support_left) < float(support_right):
         st.error(
-            "The support must satisfy A < B."
+            "The interval must satisfy A < B."
         )
         st.stop()
 
@@ -419,7 +431,7 @@ if st.button(
         float(samples.max()) > float(support_right)
     ):
         st.error(
-            "At least one observation lies outside the selected support."
+            "At least one observation lies outside the selected interval."
         )
         st.stop()
 
@@ -465,7 +477,7 @@ if st.button(
         )
 
     st.caption(
-        "Effective support: "
+        "Effective interval: "
         f"[{result.support[0]:.6g}, "
         f"{result.support[1]:.6g}]"
     )
@@ -583,11 +595,11 @@ if st.button(
         )
 
         st.write(
-            "Numerical density integral over support: "
+            "Numerical density integral over interval: "
             f"**{integral:.10f}**"
         )
         st.write(
-            f"Support rule: **{support_note}**"
+            f"Interval rule: **{support_note}**"
         )
         st.write(
             "Model: **GMM K=32 EMA checkpoint**"
