@@ -14,12 +14,24 @@ from inference import AmortizedKDE
 
 
 DENSITY_GRID_SIZE = 512
+MIN_SAMPLE_SIZE = 5
+MAX_SAMPLE_SIZE = 256
+
+APP_TITLE = (
+    "Amortized Bandwidth Learning for Kernel Density Estimation "
+    "under Logarithmic Score"
+)
+
+SPECIFIED_INTERVAL_LABEL = "Specified bounded interval [A, B]"
+AUTOMATIC_INTERVAL_LABEL = (
+    "Automatic sample-adaptive bounded interval"
+)
 
 APP_DIR = Path(__file__).resolve().parent
 CHECKPOINT_PATH = APP_DIR / "gmm32_selector.pt"
 
 st.set_page_config(
-    page_title="Amortized KDE",
+    page_title=APP_TITLE,
     layout="centered",
 )
 
@@ -134,19 +146,19 @@ def fmt(x: float) -> str:
     return f"{x:.6g}"
 
 
-def sample_adaptive_working_interval(
+def sample_adaptive_bounded_interval(
     samples: np.ndarray,
 ) -> tuple[float, float]:
     """
-    Automatic working interval with c=1:
+    Automatic bounded interval with c=1:
 
         R = x_max - x_min
         A = x_min - R/(N-1)
         B = x_max + R/(N-1)
 
-    This is a uniform-reference, sample-size-adaptive working
-    interval. It is not a confidence interval or a general
-    estimator of mathematical support.
+    This is a uniform-reference, sample-size-adaptive bounded
+    interval. It is not a confidence interval or an estimator
+    of the full mathematical support.
     """
     x = np.asarray(
         samples,
@@ -215,19 +227,18 @@ def trapezoidal_integral(
     )
 
 
-st.title(
-    "Amortized Bandwidth Learning for Kernel Density Estimation "
-    "under Logarithmic Score Loss"
-)
+st.title(APP_TITLE)
 
 st.markdown(
     """
-This interactive tool implements the amortized bandwidth selector developed in the accompanying paper.
-Given a one-dimensional sample, the method summarizes the sample using five features—sample size,
-mean, standard deviation, skewness, and kurtosis—and uses a neural selector trained across Gaussian-mixture
-density-estimation tasks to predict the KDE bandwidth directly, without performing a new bandwidth search
-for each dataset. The predicted bandwidth is then used to construct a truncated Gaussian kernel density
-estimate on the selected finite interval.
+This interactive tool implements the amortized bandwidth selector developed
+in the accompanying paper. Given a one-dimensional sample, the method
+summarizes the sample using five features—sample size, mean, standard
+deviation, skewness, and kurtosis—and uses a neural selector trained across
+Gaussian-mixture density-estimation tasks to predict the KDE bandwidth
+directly, without performing a new bandwidth search for each dataset.
+The predicted bandwidth is then used to construct a truncated-and-renormalized
+Gaussian kernel density estimate on the selected working interval.
 """
 )
 
@@ -254,6 +265,7 @@ samples = np.array(
     dtype=np.float64,
 )
 input_error = None
+sample_size_is_valid = False
 
 if input_method == "Paste values":
     sample_text = st.text_area(
@@ -313,10 +325,37 @@ if (
     and
     np.all(np.isfinite(samples))
 ):
+    n_current = int(samples.size)
+
     st.caption(
-        f"n = {samples.size}; observed range = "
+        f"n = {n_current}; observed range = "
         f"[{fmt(float(samples.min()))}, "
         f"{fmt(float(samples.max()))}]"
+    )
+
+    sample_size_is_valid = (
+        MIN_SAMPLE_SIZE
+        <= n_current
+        <= MAX_SAMPLE_SIZE
+    )
+
+    if n_current < MIN_SAMPLE_SIZE:
+        st.error(
+            "The deployed selector was trained for sample sizes "
+            f"{MIN_SAMPLE_SIZE}–{MAX_SAMPLE_SIZE}. Please provide "
+            f"at least {MIN_SAMPLE_SIZE} observations."
+        )
+
+    elif n_current > MAX_SAMPLE_SIZE:
+        st.error(
+            "The deployed selector was trained for sample sizes "
+            f"{MIN_SAMPLE_SIZE}–{MAX_SAMPLE_SIZE}. Please provide "
+            f"no more than {MAX_SAMPLE_SIZE} observations."
+        )
+
+elif samples.size > 0:
+    st.error(
+        "The sample contains NaN or infinite values."
     )
 
 
@@ -325,14 +364,14 @@ if (
 # ============================================================
 
 st.subheader(
-    "2. Specify interval"
+    "2. Specify bounded interval"
 )
 
 interval_method = st.radio(
     "Choose an interval method",
     [
-        "Known finite support [A, B]",
-        "Automatic sample-adaptive interval",
+        SPECIFIED_INTERVAL_LABEL,
+        AUTOMATIC_INTERVAL_LABEL,
     ],
     index=1,
 )
@@ -341,9 +380,10 @@ support_left = None
 support_right = None
 support_note = ""
 
-if interval_method == "Known finite support [A, B]":
+if interval_method == SPECIFIED_INTERVAL_LABEL:
     st.caption(
-        "Use this option when the finite support is known."
+        "Use this option when [A, B] is specified from physical "
+        "or operational bounds or representative reference data."
     )
 
     c1, c2 = st.columns(2)
@@ -362,25 +402,24 @@ if interval_method == "Known finite support [A, B]":
             format="%.6f",
         )
 
-    support_note = "User-specified known finite support."
+    support_note = "User-specified bounded interval."
 
 else:
     st.caption(
-        "The automatic rule constructs a sample-size-adaptive "
-        "working interval from the observed minimum, maximum, "
-        "and range. It is a uniform-reference rule, not a "
-        "confidence interval or a general estimator of the "
+        "The automatic rule constructs a sample-adaptive bounded "
+        "interval by expanding the observed sample range. It is "
+        "not a confidence interval or an estimator of the full "
         "mathematical support."
     )
 
     if (
-        samples.size > 0
+        sample_size_is_valid
         and
         np.all(np.isfinite(samples))
     ):
         try:
             support_left, support_right = (
-                sample_adaptive_working_interval(samples)
+                sample_adaptive_bounded_interval(samples)
             )
 
             n_current = int(samples.size)
@@ -400,7 +439,7 @@ else:
             )
 
             st.info(
-                "Automatic working interval: "
+                "Automatic bounded interval: "
                 f"[{fmt(support_left)}, "
                 f"{fmt(support_right)}]"
             )
@@ -411,7 +450,7 @@ else:
             )
 
             support_note = (
-                "Automatic sample-adaptive working interval: "
+                "Automatic sample-adaptive bounded interval: "
                 "A = x_min - R/(N-1), "
                 "B = x_max + R/(N-1)."
             )
@@ -430,10 +469,21 @@ st.subheader(
     "3. Estimate density"
 )
 
+estimate_button_disabled = (
+    input_error is not None
+    or
+    (
+        samples.size > 0
+        and
+        not sample_size_is_valid
+    )
+)
+
 if st.button(
     "Estimate Density",
     type="primary",
     use_container_width=True,
+    disabled=estimate_button_disabled,
 ):
     if input_error:
         st.error(
@@ -453,9 +503,19 @@ if st.button(
         )
         st.stop()
 
-    if not (5 <= samples.size <= 256):
+    if samples.size < MIN_SAMPLE_SIZE:
         st.error(
-            "The deployed selector supports 5 ≤ n ≤ 256."
+            "The deployed selector was trained for sample sizes "
+            f"{MIN_SAMPLE_SIZE}–{MAX_SAMPLE_SIZE}. Please provide "
+            f"at least {MIN_SAMPLE_SIZE} observations."
+        )
+        st.stop()
+
+    if samples.size > MAX_SAMPLE_SIZE:
+        st.error(
+            "The deployed selector was trained for sample sizes "
+            f"{MIN_SAMPLE_SIZE}–{MAX_SAMPLE_SIZE}. Please provide "
+            f"no more than {MAX_SAMPLE_SIZE} observations."
         )
         st.stop()
 
@@ -523,7 +583,7 @@ if st.button(
         )
 
     st.caption(
-        "Effective interval: "
+        "Effective bounded interval: "
         f"[{result.support[0]:.6g}, "
         f"{result.support[1]:.6g}]"
     )
@@ -641,7 +701,7 @@ if st.button(
         )
 
         st.write(
-            "Numerical density integral over interval: "
+            "Numerical density integral over bounded interval: "
             f"**{integral:.10f}**"
         )
         st.write(
