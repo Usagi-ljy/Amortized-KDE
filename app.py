@@ -231,18 +231,27 @@ st.title(APP_TITLE)
 
 st.markdown(
     """
-This interactive tool implements the amortized bandwidth selector developed
-in our paper, **[Amortized Bandwidth Learning for Kernel Density Estimation
-under Logarithmic Score](https://arxiv.org/abs/2608.20445)**
-([arXiv:2608.20445](https://arxiv.org/abs/2608.20445)).
+📄 **Paper:** [Amortized Bandwidth Learning for Kernel Density Estimation
+under Logarithmic Score](https://arxiv.org/abs/2608.20445)  
+**Preprint:** [arXiv:2608.20445](https://arxiv.org/abs/2608.20445)
+"""
+)
 
-Given a one-dimensional sample, the method summarizes the sample using five
-features—sample size, mean, standard deviation, skewness, and kurtosis—and uses
-a neural selector trained across Gaussian-mixture density-estimation tasks to
-predict the KDE bandwidth directly, without performing a new bandwidth search
+st.markdown(
+    """
+This web application provides an interactive implementation of the amortized
+bandwidth selector introduced in the paper. The proposed framework learns the
+mapping from a finite sample to a KDE bandwidth across a distribution of
+density-estimation tasks by optimizing the logarithmic score. Once trained, it
+predicts a bandwidth directly, avoiding a new optimization or bandwidth search
 for each dataset.
-The predicted bandwidth is then used to construct a truncated-and-renormalized
-Gaussian kernel density estimate on the selected working interval.
+
+The deployed selector was trained on Gaussian-mixture tasks with 32 components.
+For a one-dimensional sample of size 5–256, it uses five sample features—sample
+size, mean, standard deviation, skewness, and kurtosis—to predict the bandwidth.
+The application then constructs a truncated-and-renormalized Gaussian KDE on
+either a user-specified bounded interval or an automatically generated
+sample-adaptive interval.
 """
 )
 
