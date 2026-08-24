@@ -239,19 +239,20 @@ under Logarithmic Score](https://arxiv.org/abs/2608.20445)
 
 st.markdown(
     """
-This web application provides an interactive implementation of the amortized
-bandwidth selector introduced in the paper. The proposed framework learns the
-mapping from a finite sample to a KDE bandwidth across a distribution of
-density-estimation tasks by optimizing the logarithmic score. Once trained, it
-predicts a bandwidth directly, avoiding a new optimization or bandwidth search
-for each dataset.
+This web application demonstrates the amortized bandwidth-selection framework
+proposed in the paper. The framework learns the mapping from a finite sample
+to a KDE bandwidth across a distribution of density-estimation tasks by
+optimizing the logarithmic score. Once trained, it predicts a bandwidth
+directly, without requiring a new optimization or bandwidth search for each
+sample.
 
-The deployed selector was trained on Gaussian-mixture tasks with 32 components.
-For a one-dimensional sample of size 5–256, it uses five sample features—sample
-size, mean, standard deviation, skewness, and kurtosis—to predict the bandwidth.
-The application then constructs a truncated-and-renormalized Gaussian KDE on
-either a user-specified bounded interval or an automatically generated
-sample-adaptive interval.
+The deployed model is the GMM K=32 selector. For a one-dimensional sample of
+size 5–256, it uses five features—sample size, mean, sample standard deviation,
+skewness, and kurtosis—to predict the bandwidth. The predicted bandwidth is
+transferred to the selected bounded interval and used to construct a
+truncated-and-renormalized Gaussian KDE. For convenience, the web interface
+allows the interval to be either specified by the user or generated using a
+sample-adaptive rule.
 """
 )
 
