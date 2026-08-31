@@ -1,5 +1,9 @@
-streamlit
+# Python dependencies used by the three reproduction notebooks.
+
 numpy
 pandas
-matplotlib
+scipy
 torch
+matplotlib
+ipython
+jupyter
