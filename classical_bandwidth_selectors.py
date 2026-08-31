@@ -9,6 +9,11 @@ The definitions intentionally match the benchmark implementation:
 
 The exact R call is retained for Sheather--Jones because commonly available
 Python packages implement different selectors under similar names.
+
+For a fair comparison with the neural selectors, ``compute_classical_bandwidths``
+can apply the same affine standardisation: map a declared support ``[A, B]``
+to ``[-1, 1]``, select each bandwidth there, and multiply the result by
+``(B - A) / 2`` to return to the original data scale.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ MIN_BANDWIDTH = 1e-10
 LSCV_GRID_SIZE = 60
 LSCV_FACTOR_LOW = 0.2
 LSCV_FACTOR_HIGH = 5.0
+REFERENCE_LEFT = -1.0
+REFERENCE_RIGHT = 1.0
 
 
 def _as_sample(samples: Iterable[float]) -> np.ndarray:
@@ -38,6 +45,51 @@ def _as_sample(samples: Iterable[float]) -> np.ndarray:
     if float(np.ptp(sample)) <= 0.0:
         raise ValueError("Bandwidth selection requires non-zero sample spread.")
     return sample
+
+
+def _validate_support(
+    support: tuple[float, float],
+) -> tuple[float, float]:
+    if len(support) != 2:
+        raise ValueError("support must be a pair (left, right).")
+    left, right = float(support[0]), float(support[1])
+    if not (math.isfinite(left) and math.isfinite(right) and left < right):
+        raise ValueError("support must contain finite endpoints with left < right.")
+    return left, right
+
+
+def rescale_to_reference_interval(
+    samples: Iterable[float],
+    support: tuple[float, float],
+) -> tuple[np.ndarray, float, float]:
+    """Map ``support`` affinely to ``[-1, 1]``.
+
+    Returns
+    -------
+    sample_reference:
+        The transformed observations.
+    centre:
+        ``(A + B) / 2`` on the original scale.
+    scale:
+        ``(B - A) / 2``.  A reference bandwidth is returned to the original
+        scale by multiplying it by this value.
+    """
+
+    sample = _as_sample(samples)
+    left, right = _validate_support(support)
+    tolerance = 1e-12 * max(1.0, abs(left), abs(right))
+    if sample.min() < left - tolerance or sample.max() > right + tolerance:
+        raise ValueError("At least one observation lies outside the declared support.")
+
+    centre = 0.5 * (left + right)
+    scale = 0.5 * (right - left)
+    sample_reference = (sample - centre) / scale
+    if (
+        sample_reference.min() < REFERENCE_LEFT - 1e-10
+        or sample_reference.max() > REFERENCE_RIGHT + 1e-10
+    ):
+        raise RuntimeError("The affine reference transformation failed.")
+    return sample_reference, centre, scale
 
 
 def silverman_bandwidth(samples: Iterable[float]) -> float:
@@ -187,11 +239,35 @@ def compute_classical_bandwidths(
     samples: Iterable[float],
     methods: Iterable[str] = ("silverman", "sheather_jones", "lscv"),
     *,
+    support: Optional[tuple[float, float]] = None,
+    rescale_to_reference: bool = False,
     rscript_executable: Optional[str] = None,
 ) -> dict[str, float]:
-    """Compute selected classical bandwidths in the requested order."""
+    """Compute selected classical bandwidths in the requested order.
+
+    When ``rescale_to_reference=True``, ``support`` is required.  Every
+    selector is then evaluated after mapping that support to ``[-1, 1]``.
+    Returned bandwidths are always on the original data scale.
+
+    Classical selectors are affine equivariant, so this explicit rescaling is
+    theoretically equivalent to selecting directly on the original scale.
+    The explicit route is retained to make every method follow the same public
+    comparison pipeline as the neural selectors.
+    """
 
     sample = _as_sample(samples)
+    if rescale_to_reference:
+        if support is None:
+            raise ValueError(
+                "support is required when rescale_to_reference=True."
+            )
+        selection_sample, _, bandwidth_scale = rescale_to_reference_interval(
+            sample, support
+        )
+    else:
+        selection_sample = sample
+        bandwidth_scale = 1.0
+
     aliases = {
         "silverman": "silverman",
         "sj": "sheather_jones",
@@ -200,24 +276,32 @@ def compute_classical_bandwidths(
         "lscv": "lscv",
     }
     result: dict[str, float] = {}
-    silverman_value: Optional[float] = None
+    silverman_selection_scale: Optional[float] = None
     for requested in methods:
         key = str(requested).strip().lower()
         if key not in aliases:
             raise ValueError(f"Unknown classical selector: {requested!r}.")
         method = aliases[key]
         if method == "silverman":
-            silverman_value = silverman_bandwidth(sample)
-            result["Silverman"] = silverman_value
+            silverman_selection_scale = silverman_bandwidth(selection_sample)
+            result["Silverman"] = (
+                bandwidth_scale * silverman_selection_scale
+            )
         elif method == "sheather_jones":
-            result["Sheather–Jones"] = sheather_jones_bandwidth(
-                sample, rscript_executable=rscript_executable
+            reference_value = sheather_jones_bandwidth(
+                selection_sample, rscript_executable=rscript_executable
             )
+            result["Sheather–Jones"] = bandwidth_scale * reference_value
         else:
-            if silverman_value is None:
-                silverman_value = silverman_bandwidth(sample)
-            result["LSCV"] = lscv_bandwidth(
-                sample, reference_bandwidth=silverman_value
+            if silverman_selection_scale is None:
+                silverman_selection_scale = silverman_bandwidth(selection_sample)
+            reference_value = lscv_bandwidth(
+                selection_sample,
+                reference_bandwidth=silverman_selection_scale,
             )
-    return result
+            result["LSCV"] = bandwidth_scale * reference_value
 
+    for method, bandwidth in result.items():
+        if not math.isfinite(bandwidth) or bandwidth <= 0.0:
+            raise RuntimeError(f"{method} returned an invalid bandwidth.")
+    return result
