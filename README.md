@@ -72,16 +72,18 @@ measured in bits. Smaller values are better.
 
 Users will also be able to request tests for additional target distributions through a GitHub issue.
 
-### 3. Reproducible model examples
+## Reproducible training scripts
 
-Two compact training examples are planned:
+The repository includes two standalone training scripts:
 
-- `train_gaussian.py`: Gaussian task generation, model training and inference;
-- `train_gmm32.py`: fresh bounded GMM $K=32$ task generation, model training and inference.
+- `train_gaussian.py`: Gaussian task generation, $n$-only bandwidth-ratio training and best-checkpoint selection;
+- `train_gmm32.py`: exact bounded GMM $K=32$ generation, five-feature training, EMA validation and best-checkpoint selection.
 
-These scripts will expose the essential training logic without including all paper figures, bootstrap calculations or large experimental notebooks.
+Both files are self-contained and do not depend on variables defined in a notebook. Their default settings reproduce the reported training protocols. A small `--quick` mode is provided only to verify that the code executes; it does not reproduce the trained models.
 
-### 4. Privacy-preserving usage statistics
+Training outputs are written under `training_outputs/`, so running either script does not overwrite the published checkpoints in the repository root.
+
+## Planned privacy-preserving usage statistics
 
 The deployed app may record aggregate events such as page visits, approximate anonymous users who successfully generate a KDE, successful generation counts and run times. It will not store uploaded sample values, filenames, IP addresses or other directly identifying information.
 
@@ -212,6 +214,8 @@ Current files:
 Amortized-KDE/
 ├── app.py
 ├── inference.py
+├── train_gaussian.py
+├── train_gmm32.py
 ├── gaussian_selector.pt
 ├── multifamily_selector.pt
 ├── gmm32_selector.pt
@@ -229,12 +233,12 @@ distributions.py           # Gaussian, ten-family and GMM task generators
 evaluation.py              # Independent-sample logarithmic-score evaluation
 plotting.py                # Shared colours, legends and density figures
 analytics.py               # Anonymous aggregate usage events
-train_gaussian.py          # Compact Gaussian training example
-train_gmm32.py             # Compact GMM K=32 training example
 tests/                     # Loading, positivity, integration and generator tests
 ```
 
 ## Run locally
+
+### Web app
 
 From the repository directory:
 
@@ -244,6 +248,24 @@ python3 -m streamlit run app.py
 ```
 
 Then open the local URL shown by Streamlit, typically [http://localhost:8501](http://localhost:8501).
+
+### Training scripts
+
+Run a small execution check:
+
+```bash
+python3 train_gaussian.py --quick
+python3 train_gmm32.py --quick
+```
+
+Run the complete default training protocols:
+
+```bash
+python3 train_gaussian.py
+python3 train_gmm32.py
+```
+
+The complete GMM training is computationally expensive: its maximum configuration contains 40,000 optimisation steps with 256 fresh GMM tasks per step.
 
 ## Scope and limitations
 
