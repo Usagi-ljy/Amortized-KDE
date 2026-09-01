@@ -53,7 +53,7 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-01 · clean-workflow-v5"
+APP_REVISION = "2026-09-01 · clean-workflow-v6"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
 
@@ -1426,13 +1426,6 @@ if app_mode == "Data":
         "Paste values or upload a CSV/TXT file. If both are supplied, the "
         "uploaded file is used. Numeric CSV cells are flattened row by row."
     )
-    st.info(
-        "Even when the distribution family is known, its full density and "
-        "parameters are not inferred from a label alone. This workflow "
-        "therefore compares KDE curves and bandwidths without reporting a "
-        "true-density log score."
-    )
-
     with st.form("sample_confirmation_form"):
         input_left, input_right = st.columns(2)
         with input_left:
