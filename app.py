@@ -3,13 +3,12 @@
 The application has two workflows:
 
 1. ``Data`` compares selected bandwidth methods on an uploaded or pasted
-   one-dimensional sample.  A known/unknown family choice selects the matched
-   amortized checkpoint.  The page displays both bounded and ordinary
-   unbounded Gaussian KDEs on shared grids.
-2. ``Simulation`` first presents the paper's three aggregate benchmark areas,
-   then optionally generates a fresh task from the Gaussian, multi-family, or
-   bounded GMM K=32 setup.  The single-task result overlays the true density
-   and evaluates empirical negative log2 score on an independent test sample.
+   one-dimensional sample.  It displays both bounded and ordinary unbounded
+   Gaussian KDEs on shared grids.
+2. ``Simulation`` generates a fresh task from the Gaussian, multi-family, or
+   bounded GMM K=32 setup used by the project.  It overlays the true density,
+   estimates the KDEs, and evaluates empirical negative log2 score on an
+   independent test sample.
 
 Every classical selector follows the same explicit affine comparison route as
 the neural selectors: map the working support to ``[-1, 1]``, select a
@@ -54,7 +53,7 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-01 · hierarchical-data-simulation-v4"
+APP_REVISION = "2026-09-01 · clean-workflow-v5"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
 
@@ -107,11 +106,6 @@ MULTIFAMILY_OPTIONS = (
     *FAMILY_LABELS.values(),
 )
 FAMILY_FROM_LABEL = {label: key for key, label in FAMILY_LABELS.items()}
-
-DATA_FAMILY_OPTIONS = (
-    *FAMILY_LABELS.values(),
-    "Other / request another distribution",
-)
 
 # Web-display copies of the paper figures.  Keep the corresponding EPS files
 # under the same stems for archival/download purposes; Streamlit displays PNG.
@@ -251,6 +245,37 @@ def default_method_selection() -> list[str]:
 
 def dataframe_to_csv_bytes(frame: pd.DataFrame) -> bytes:
     return frame.to_csv(index=False).encode("utf-8")
+
+
+def distribution_request_url(distribution_name: str = "") -> str:
+    """Build a prefilled GitHub issue for a requested simulation family."""
+
+    cleaned_name = distribution_name.strip()
+    requested_name = cleaned_name or "[distribution name and parameters]"
+    query = urlencode(
+        {
+            "title": f"Distribution request: {requested_name}",
+            "body": (
+                "Please add the following distribution to the interactive "
+                "simulation workflow.\n\n"
+                f"Distribution: {requested_name}\n\n"
+                "Suggested parameter range or reference:\n"
+                "Additional notes:\n\n"
+                "This request does not include uploaded sample data."
+            ),
+        }
+    )
+    return f"{ISSUE_URL}?{query}"
+
+
+def selector_for_known_family(family_label: str) -> str:
+    """Choose the matching public checkpoint for a known family label."""
+
+    if family_label == "Gaussian":
+        return "gaussian"
+    if family_label in FAMILY_FROM_LABEL:
+        return "multifamily"
+    return "gmm32"
 
 
 # ---------------------------------------------------------------------------
@@ -1011,7 +1036,7 @@ def render_benchmark_figure(
     """Display a browser-friendly copy of one existing paper figure."""
 
     st.subheader(title)
-    image_path = resolve_benchmark_asset(filename)
+    image_path = FIGURE_DIR / filename
     if image_path.is_file():
         st.image(
             str(image_path),
@@ -1020,126 +1045,108 @@ def render_benchmark_figure(
         )
         return
 
-    eps_path = resolve_benchmark_asset(Path(filename).with_suffix(".eps").name)
+    eps_path = image_path.with_suffix(".eps")
     if eps_path.is_file():
         st.warning(
             f"Found `{eps_path.name}`, but browsers do not reliably render EPS. "
-            f"Export the same figure as `{filename}`."
+            f"Export the same figure as `{filename}` and place it in `figures/`."
         )
     else:
         st.info(
-            f"Add `{filename}` to either the repository root or its `figures/` "
-            "directory. The matching EPS file may be stored beside it using "
-            "the same stem."
+            f"Add `{filename}` to the repository's `figures/` directory. "
+            "The matching EPS file may be stored beside it using the same stem."
         )
 
 
-def resolve_benchmark_asset(filename: str) -> Path:
-    """Find a paper figure in ``figures/`` or the repository root.
+def render_benchmarks() -> None:
+    """Show compact benchmark tabs before the interactive simulator."""
 
-    ``figures/`` is preferred for a tidy repository, while the root fallback
-    keeps existing deployments working when figures were uploaded beside
-    ``app.py``.
-    """
-
-    candidates = (FIGURE_DIR / filename, APP_DIR / filename)
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return candidates[0]
-
-
-def render_paper_benchmarks() -> None:
-    """Show the three paper benchmark areas before the interactive simulator."""
-
-    st.header("Benchmark results from the paper")
+    st.header("Benchmark results")
     st.write(
-        "These figures summarize repeated experiments across sample sizes. "
-        "They are the aggregate benchmark results reported in the paper, not "
-        "results recalculated from a single browser-generated sample. Shaded "
-        "bands show 90% bootstrap intervals."
+        "The aggregate figures reproduce the repeated experiments reported "
+        "in the paper. Family-specific figures extend that evaluation using "
+        "the same Multi-family selector. Shaded bands are paired 90% bootstrap "
+        "intervals; lower logarithmic score is better."
     )
 
-    render_benchmark_figure(
-        GAUSSIAN_BENCHMARK_FIGURE,
-        title="1. Gaussian benchmark",
-        caption=(
-            "Empirical logarithmic score versus sample size under Gaussian "
-            "sampling. Scores are averaged over 30,000 independent samples at "
-            "each sample size; lower is better."
-        ),
+    gaussian_tab, family_tab, gmm_tab = st.tabs(
+        ("Gaussian", "Distribution families", "GMM K=32")
     )
 
-    st.subheader("2. Distribution-family benchmark")
-    selector_column, request_column = st.columns([3.0, 1.0])
-    with selector_column:
-        selected_benchmark_family = st.selectbox(
-            "Underlying distribution shown in the benchmark figure",
-            tuple(MULTIFAMILY_BENCHMARK_FIGURES),
-            help=(
-                "Multi-family is the equal-weight aggregate across the ten "
-                "families. The other choices display family-specific results."
+    with gaussian_tab:
+        render_benchmark_figure(
+            GAUSSIAN_BENCHMARK_FIGURE,
+            title="Gaussian benchmark",
+            caption=(
+                "Empirical logarithmic score versus sample size under Gaussian "
+                "sampling, averaged over 30,000 independent tasks at each n."
             ),
         )
-    with request_column:
-        st.write("")
-        st.write("")
-        st.link_button(
-            "Request another distribution",
-            ISSUE_URL,
-            use_container_width=True,
-        )
 
-    selected_family_figure = MULTIFAMILY_BENCHMARK_FIGURES[
-        selected_benchmark_family
-    ]
-    family_caption = (
-        "Empirical logarithmic score versus sample size under bounded "
-        "multi-family sampling on [-1, 1], averaged equally across the ten "
-        "families."
-        if selected_benchmark_family == "Multi-family"
-        else (
-            "Family-specific empirical logarithmic score versus sample size "
-            f"for {selected_benchmark_family} tasks."
-        )
-    )
-    image_path = resolve_benchmark_asset(selected_family_figure)
-    if image_path.is_file():
-        st.image(
-            str(image_path),
-            caption=family_caption,
-            use_container_width=True,
-        )
-    else:
-        eps_path = resolve_benchmark_asset(
-            Path(selected_family_figure).with_suffix(".eps").name
-        )
-        if eps_path.is_file():
-            st.warning(
-                f"Found `{eps_path.name}`, but the webpage also needs "
-                f"`{selected_family_figure}` for browser display."
+    with family_tab:
+        available_figures = {
+            label: filename
+            for label, filename in MULTIFAMILY_BENCHMARK_FIGURES.items()
+            if (FIGURE_DIR / filename).is_file()
+        }
+        if available_figures:
+            selected_benchmark_family = st.selectbox(
+                "Underlying distribution",
+                tuple(available_figures),
+                help=(
+                    "Only distributions with an available PNG are listed. "
+                    "New choices appear automatically when their figures are "
+                    "added to the figures directory."
+                ),
+            )
+            selected_family_figure = available_figures[
+                selected_benchmark_family
+            ]
+            if selected_benchmark_family == "Multi-family":
+                family_caption = (
+                    "Equal-weight aggregate across the ten bounded families "
+                    "on [-1, 1], using 30,000 tasks at each n. Multi-family "
+                    "means one family is drawn for each task; the ten densities "
+                    "are not averaged into a new distribution."
+                )
+            else:
+                family_caption = (
+                    "Multi-family selector evaluated on "
+                    f"{selected_benchmark_family} tasks, using 10,000 tasks "
+                    "at each n and paired bootstrap intervals."
+                )
+            st.image(
+                str(FIGURE_DIR / selected_family_figure),
+                caption=family_caption,
+                use_container_width=True,
             )
         else:
             st.info(
-                f"Add `{selected_family_figure}` to the repository root or "
-                "its `figures/` directory."
+                "Add the Multi-family aggregate or family-specific PNG files "
+                "to the repository's `figures/` directory."
             )
-    st.caption(
-        "Multi-family means that tasks are drawn equally from the ten listed "
-        "families; it is not a density formed by averaging ten distributions. "
-        "A requested distribution can be evaluated with the existing GMM K=32 "
-        "selector once its sampler and true density are added to the simulator."
-    )
 
-    render_benchmark_figure(
-        GMM32_BENCHMARK_FIGURE,
-        title="3. Bounded GMM K=32 benchmark",
-        caption=(
-            "Empirical logarithmic score versus sample size under bounded "
-            "K=32 GMM sampling on [-1, 1]. Scores are averaged over 30,000 "
-            "independent GMM tasks at each sample size; lower is better."
-        ),
-    )
+        st.caption(
+            "Observed data from another one-dimensional continuous "
+            "distribution can already be analysed in the Data workflow. A "
+            "request asks for that family to be added to Simulation with a "
+            "sampler, true density and log-score evaluation."
+        )
+        st.link_button(
+            "Request another distribution",
+            distribution_request_url(),
+        )
+
+    with gmm_tab:
+        render_benchmark_figure(
+            GMM32_BENCHMARK_FIGURE,
+            title="Bounded GMM K=32 benchmark",
+            caption=(
+                "Empirical logarithmic score versus sample size under bounded "
+                "K=32 GMM sampling on [-1, 1], averaged over 30,000 independent "
+                "tasks at each n."
+            ),
+        )
 
 
 def render_neural_details(neural_result: Optional[NeuralBandwidthResult]) -> None:
@@ -1181,30 +1188,32 @@ def render_user_result(result: Mapping[str, object]) -> None:
         f"[{format_number(support[0])}, {format_number(support[1])}]",
     )
 
-    bounded_column, unbounded_column = st.columns(2)
-    with bounded_column:
+    bounded_tab, unbounded_tab = st.tabs(("Bounded KDE", "Unbounded KDE"))
+    with bounded_tab:
         bounded_figure = plot_kde_comparison(
             bounded_results,
             samples=sample,
-            show_histogram=True,
+            show_histogram=False,
             show_rug=True,
             title="Bounded KDE: truncated and renormalized",
+            figure_size=(10.5, 5.4),
         )
         st.pyplot(bounded_figure, clear_figure=True, use_container_width=True)
         plt.close(bounded_figure)
-    with unbounded_column:
+    with unbounded_tab:
         unbounded_figure = plot_kde_comparison(
             unbounded_results,
             samples=sample,
-            show_histogram=True,
+            show_histogram=False,
             show_rug=True,
             title="Unbounded KDE: ordinary Gaussian kernels",
+            figure_size=(10.5, 5.4),
         )
         st.pyplot(unbounded_figure, clear_figure=True, use_container_width=True)
         plt.close(unbounded_figure)
 
     st.caption(
-        "The bounded and unbounded panels use the same observations and the "
+        "The bounded and unbounded views use the same observations and the "
         "same method-specific bandwidths. Only the density normalization and "
         "display support differ."
     )
@@ -1353,17 +1362,21 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
 
 
 st.title(APP_TITLE)
-st.caption(f"Web app revision: {APP_REVISION}")
 st.markdown(
     f"""
-📄 **Paper:** [Amortized Bandwidth Learning for Kernel Density Estimation
-under Logarithmic Score]({PAPER_URL})  
-**Preprint:** [arXiv:2608.20445]({PAPER_URL})
+[Amortized Bandwidth Learning for Kernel Density Estimation under Logarithmic
+Score]({PAPER_URL}) · [arXiv:2608.20445]({PAPER_URL})
 """
 )
+st.write(
+    "Compare an amortized KDE bandwidth selector with Silverman, "
+    "Sheather–Jones and LSCV on your own sample or on a generated task with "
+    "known truth."
+)
 
-st.markdown(
-    """
+with st.expander("About the method and working interval"):
+    st.markdown(
+        """
 This web application demonstrates the amortized bandwidth-selection framework
 proposed in the paper. The framework learns the mapping from a finite sample
 to a KDE bandwidth across a distribution of density-estimation tasks by
@@ -1371,328 +1384,298 @@ optimizing the logarithmic score. Once trained, it predicts a bandwidth
 directly, without requiring a new optimization or bandwidth search for each
 sample.
 
-For user data with an unknown family, the default deployed model is the GMM
-K=32 selector. When the family is known, the interface instead uses the
-matched Gaussian or Multi-family checkpoint. For a one-dimensional sample of
-size 5–256, the general selectors use five features—sample size, mean, sample
-standard deviation, skewness, and kurtosis—to predict the bandwidth. The
-predicted bandwidth is transferred to the selected bounded interval and used
-to construct a truncated-and-renormalized Gaussian KDE. For convenience, the
-web interface allows the interval to be either specified by the user or
-generated using a sample-adaptive rule.
-"""
-)
+The available amortized selectors operate on one-dimensional samples of size
+5–256 and use five features—sample size, mean, sample standard deviation,
+skewness, and kurtosis—to predict the bandwidth. The predicted bandwidth is
+transferred to the selected bounded interval and used to construct a
+truncated-and-renormalized Gaussian KDE. For convenience, the web interface
+allows the interval to be either specified by the user or generated using a
+sample-adaptive rule.
 
-st.markdown(
-    """
 The extended comparison keeps this original workflow and adds three classical
 bandwidth selectors—Silverman, Sheather–Jones, and least-squares
 cross-validation (LSCV)—together with an ordinary unbounded KDE view. The
-simulation workflow uses the matched Gaussian and Multi-family checkpoints for
-their respective settings, while the GMM K=32 selector remains the default for
-user data with an unknown distribution family. Paper benchmark figures and
-single-task simulations are presented separately so that aggregate trends are
-not confused with one random realization.
+appropriate amortized checkpoint is selected automatically from the available
+information about the underlying family. The GMM K=32 selector is used when
+the family is unknown or outside the ten-family collection.
 """
-)
+    )
 
-link_columns = st.columns([1, 1, 1, 3])
+link_columns = st.columns([1, 1, 4])
 link_columns[0].link_button("Read the paper", PAPER_URL, use_container_width=True)
 link_columns[1].link_button("View code on GitHub", GITHUB_URL, use_container_width=True)
-link_columns[2].link_button(
-    "Request a distribution", ISSUE_URL, use_container_width=True
-)
 
 with st.sidebar:
-    st.header("KDE comparison")
-    st.caption(f"App revision: `{APP_REVISION}`")
+    st.header("KDE workflows")
     app_mode = st.radio(
-        "Choose a workflow",
+        "Workflow",
         ("Data", "Simulation"),
-        help=(
-            "Use Data for your own observations. Use Simulation to inspect "
-            "the paper benchmarks and generate a new task with known truth."
-        ),
+        help="Use your own observations, or generate a task with known truth.",
     )
     st.divider()
     st.caption(
         "Samples are processed only during the current app session. The app "
         "does not intentionally save uploaded observations."
     )
-    with st.expander("Model files"):
-        for checkpoint_name in (
-            "gaussian_selector.pt",
-            "multifamily_selector.pt",
-            "gmm32_selector.pt",
-        ):
-            marker = "✅" if (APP_DIR / checkpoint_name).is_file() else "⚠️"
-            st.write(f"{marker} `{checkpoint_name}`")
+    st.caption(APP_REVISION)
 
 
 if app_mode == "Data":
     st.header("Compare methods on your data")
     st.write(
-        "Paste values or upload a CSV/TXT file, confirm the sample, and then "
-        "tell the app whether its underlying distribution family is known. "
-        "If both text and a file are supplied, the uploaded file is used."
+        "Paste values or upload a CSV/TXT file. If both are supplied, the "
+        "uploaded file is used. Numeric CSV cells are flattened row by row."
+    )
+    st.info(
+        "Even when the distribution family is known, its full density and "
+        "parameters are not inferred from a label alone. This workflow "
+        "therefore compares KDE curves and bandwidths without reporting a "
+        "true-density log score."
     )
 
-    input_left, input_right = st.columns(2)
-    with input_left:
-        manual_text = st.text_area(
-            "Paste sample values",
-            height=155,
-            placeholder="0.12, -0.35, 0.48, 0.22, ...",
-        )
-    with input_right:
-        uploaded_file = st.file_uploader(
-            "Upload CSV or TXT",
-            type=("csv", "txt"),
-        )
-        st.caption(
-            "Headers and nonnumeric text are ignored. Numeric metadata will be "
-            "treated as sample observations."
+    with st.form("sample_confirmation_form"):
+        input_left, input_right = st.columns(2)
+        with input_left:
+            manual_text = st.text_area(
+                "Paste sample values",
+                height=155,
+                placeholder="0.12, -0.35, 0.48, 0.22, ...",
+            )
+        with input_right:
+            uploaded_file = st.file_uploader(
+                "Upload CSV or TXT",
+                type=("csv", "txt"),
+            )
+            st.caption(
+                "Headers and nonnumeric text are ignored. Numeric metadata "
+                "will be treated as sample observations."
+            )
+        confirm_sample = st.form_submit_button(
+            "Confirm sample",
+            type="primary",
+            use_container_width=True,
         )
 
-    confirm_sample = st.button(
-        "Confirm sample",
-        type="primary",
-        use_container_width=True,
-        help=(
-            "Read and validate the current pasted values or uploaded file "
-            "before showing the distribution and KDE settings."
-        ),
-    )
     if confirm_sample:
         try:
             if uploaded_file is not None:
                 parsed_sample = read_uploaded_samples(uploaded_file)
             else:
                 parsed_sample = parse_manual_samples(manual_text)
+            if not parsed_sample.size:
+                raise ValueError("Paste sample values or upload a CSV/TXT file.")
             parsed_sample = validate_sample(parsed_sample)
-            st.session_state["confirmed_user_sample"] = parsed_sample.copy()
+            st.session_state["confirmed_sample"] = parsed_sample.copy()
+            st.session_state["confirmed_sample_revision"] = int(
+                st.session_state.get("confirmed_sample_revision", 0)
+            ) + 1
+            st.session_state["user_left_endpoint"] = float(parsed_sample.min())
+            st.session_state["user_right_endpoint"] = float(parsed_sample.max())
             st.session_state.pop("user_result", None)
-            st.session_state.pop("user_sample_error", None)
         except ValueError as error:
-            st.session_state.pop("confirmed_user_sample", None)
-            st.session_state.pop("user_result", None)
-            st.session_state["user_sample_error"] = str(error)
+            st.error(str(error))
 
-    sample_error = st.session_state.get("user_sample_error")
-    current_sample = np.asarray(
-        st.session_state.get("confirmed_user_sample", []),
-        dtype=np.float64,
-    )
-    if sample_error:
-        st.error(sample_error)
-    elif current_sample.size:
+    confirmed_sample = st.session_state.get("confirmed_sample")
+    if confirmed_sample is not None:
+        current_sample = np.asarray(confirmed_sample, dtype=np.float64)
+        if "user_left_endpoint" not in st.session_state:
+            st.session_state["user_left_endpoint"] = float(current_sample.min())
+        if "user_right_endpoint" not in st.session_state:
+            st.session_state["user_right_endpoint"] = float(current_sample.max())
         st.success(
             f"Confirmed {current_sample.size} observations from "
             f"{format_number(current_sample.min())} to "
             f"{format_number(current_sample.max())}."
         )
+
+        st.subheader("Analysis settings")
+        distribution_status = st.radio(
+            "Is the underlying distribution family known?",
+            ("Unknown", "Known"),
+            horizontal=True,
+            key="user_distribution_status",
+        )
+
+        selected_family_label = "Unknown"
+        neural_selector_name = "gmm32"
+        if distribution_status == "Known":
+            known_family_options = (
+                *FAMILY_LABELS.values(),
+                "Other / request another distribution",
+            )
+            selected_family_label = st.selectbox(
+                "Known distribution family",
+                known_family_options,
+                key="user_known_family",
+            )
+            neural_selector_name = selector_for_known_family(
+                selected_family_label
+            )
+
+            if selected_family_label == "Other / request another distribution":
+                requested_distribution = st.text_input(
+                    "Distribution name and parameters",
+                    placeholder="Weibull(shape=2)",
+                    key="user_requested_distribution",
+                )
+                st.caption(
+                    "Your current sample can be analysed immediately with the "
+                    "general-purpose GMM K=32 selector. Submitting a request "
+                    "only asks for this family to be added to Simulation with "
+                    "reproducible sampling, a true density and log-score "
+                    "evaluation. No sample values are included in the request."
+                )
+                st.link_button(
+                    "Request this distribution",
+                    distribution_request_url(requested_distribution),
+                )
+
         st.caption(
-            "If you edit the pasted values or replace the uploaded file, "
-            "click **Confirm sample** again before generating the comparison."
-        )
-    else:
-        st.caption(
-            "Enter or upload at least five observations, then click "
-            "**Confirm sample** to continue."
+            "Amortized checkpoint used when that method is selected: "
+            f"{NEURAL_LABELS[neural_selector_name]}."
         )
 
-    if not current_sample.size:
-        st.stop()
-
-    st.subheader("Underlying distribution information")
-    distribution_knowledge = st.radio(
-        "Do you know the underlying distribution family?",
-        ("Unknown", "Known"),
-        horizontal=True,
-        help=(
-            "This choice determines which trained amortized selector is used. "
-            "It does not change the three classical selectors."
-        ),
-    )
-
-    selected_data_family: Optional[str] = None
-    requested_distribution = ""
-    if distribution_knowledge == "Known":
-        selected_data_family = st.selectbox(
-            "Select the underlying distribution family",
-            DATA_FAMILY_OPTIONS,
-        )
-        if selected_data_family == "Other / request another distribution":
-            requested_distribution = st.text_input(
-                "Distribution name or short description",
-                placeholder="For example: Weibull(shape=2), or a custom family",
+        option_left, option_right = st.columns(2)
+        with option_left:
+            selected_methods = st.multiselect(
+                "Bandwidth methods",
+                METHOD_OPTIONS,
+                default=default_method_selection(),
+                key="user_methods",
             )
-            request_parameters = {
-                "title": (
-                    "Distribution request"
-                    if not requested_distribution.strip()
-                    else f"Distribution request: {requested_distribution.strip()}"
+            if (
+                "Sheather–Jones" in selected_methods
+                and not sheather_jones_is_available()
+            ):
+                st.warning(
+                    "Exact Sheather–Jones requires Rscript. Add `r-base-core` "
+                    "to `packages.txt` for Streamlit Community Cloud."
+                )
+        with option_right:
+            interval_choice = st.radio(
+                "Working interval",
+                (
+                    "Automatic sample-adaptive interval",
+                    "Known finite support [A, B]",
                 ),
-                "body": (
-                    "Requested distribution or description:\n\n"
-                    f"{requested_distribution.strip()}\n\n"
-                    "Please add any desired parameter ranges or simulation "
-                    "details."
+                help=(
+                    "This interval is used for reference rescaling and for the "
+                    "bounded KDE."
                 ),
-            }
-            st.link_button(
-                "Request this distribution",
-                f"{ISSUE_URL}?{urlencode(request_parameters)}",
-                use_container_width=True,
             )
 
-    if distribution_knowledge == "Unknown":
-        user_neural_selector_name = "gmm32"
-        selector_reason = (
-            "The GMM K=32 selector is used as the general-purpose choice "
-            "when the family is unknown."
-        )
-    elif selected_data_family == "Gaussian":
-        user_neural_selector_name = "gaussian"
-        selector_reason = (
-            "The Gaussian-trained selector is used because Gaussian was "
-            "selected as the known family."
-        )
-    elif selected_data_family == "Other / request another distribution":
-        user_neural_selector_name = "gmm32"
-        selector_reason = (
-            "The GMM K=32 selector is used for the requested/custom family "
-            "until a dedicated or matched selector is available."
-        )
-    else:
-        user_neural_selector_name = "multifamily"
-        selector_reason = (
-            "The Multi-family selector is used because the selected family "
-            "belongs to its ten-family training collection."
-        )
-
-    st.info(
-        f"**Amortized checkpoint:** "
-        f"{NEURAL_LABELS[user_neural_selector_name]}. {selector_reason} "
-        "For uploaded data, selecting a family does not identify unknown "
-        "distribution parameters, so the app compares KDE curves and "
-        "bandwidths without claiming a true-density log score."
-    )
-
-    option_left, option_right = st.columns(2)
-    with option_left:
-        selected_methods = st.multiselect(
-            "Bandwidth methods",
-            METHOD_OPTIONS,
-            default=default_method_selection(),
-            key="user_methods",
-        )
-        if (
-            "Sheather–Jones" in selected_methods
-            and not sheather_jones_is_available()
-        ):
-            st.warning(
-                "Exact Sheather–Jones requires Rscript. Add `r-base-core` to "
-                "`packages.txt` for Streamlit Community Cloud."
-            )
-    with option_right:
-        interval_choice = st.radio(
-            "Working interval",
-            (
-                "Automatic sample-adaptive interval",
-                "Known finite support [A, B]",
-            ),
-            help=(
-                "This interval is used for reference rescaling and for the "
-                "bounded KDE panel."
-            ),
-        )
-
-    support_error: Optional[str] = None
-    support: Optional[tuple[float, float]] = None
-    if interval_choice == "Known finite support [A, B]":
-        bound_left, bound_right = st.columns(2)
-        default_left = float(current_sample.min()) if current_sample.size else -1.0
-        default_right = float(current_sample.max()) if current_sample.size else 1.0
-        with bound_left:
-            left_endpoint = st.number_input(
-                "A (left endpoint)", value=default_left, format="%.8g"
-            )
-        with bound_right:
-            right_endpoint = st.number_input(
-                "B (right endpoint)", value=default_right, format="%.8g"
-            )
-        if current_sample.size:
+        support_error: Optional[str] = None
+        support: Optional[tuple[float, float]] = None
+        if interval_choice == "Known finite support [A, B]":
+            bound_left, bound_right = st.columns(2)
+            with bound_left:
+                left_endpoint = st.number_input(
+                    "A (left endpoint)",
+                    key="user_left_endpoint",
+                    format="%.8g",
+                )
+            with bound_right:
+                right_endpoint = st.number_input(
+                    "B (right endpoint)",
+                    key="user_right_endpoint",
+                    format="%.8g",
+                )
             try:
                 support = validate_support(
                     (left_endpoint, right_endpoint), current_sample
                 )
             except ValueError as error:
                 support_error = str(error)
-    elif current_sample.size:
-        try:
-            support = sample_adaptive_interval(current_sample)
-            st.caption(
-                f"Automatic interval: [{format_number(support[0])}, "
-                f"{format_number(support[1])}]. This is a working interval, "
-                "not a confidence interval or a general support estimator."
-            )
-        except ValueError as error:
-            support_error = str(error)
-
-    if support_error:
-        st.error(support_error)
-
-    generate_user_result = st.button(
-        "Generate KDE comparison",
-        type="primary",
-        use_container_width=True,
-        disabled=(
-            not current_sample.size
-            or support is None
-            or bool(sample_error)
-            or bool(support_error)
-            or not selected_methods
-        ),
-    )
-    if generate_user_result:
-        try:
-            with st.spinner("Selecting bandwidths and evaluating KDE curves..."):
-                bandwidths, neural_result = compute_selected_bandwidths(
-                    current_sample,
-                    selected_methods,
-                    neural_selector_name=user_neural_selector_name,
-                    working_support=support,
+        else:
+            try:
+                support = sample_adaptive_interval(current_sample)
+                st.caption(
+                    f"Automatic interval: [{format_number(support[0])}, "
+                    f"{format_number(support[1])}]. It follows "
+                    "A = x_min - R/(n-1) and B = x_max + R/(n-1). This is a "
+                    "working interval, not a confidence interval or a general "
+                    "support estimator."
                 )
-                bounded_results = estimate_multiple_kdes(
-                    current_sample,
-                    bandwidths,
-                    mode="bounded",
-                    support=support,
-                    grid_size=DEFAULT_GRID_SIZE,
-                )
-                unbounded_results = estimate_multiple_kdes(
-                    current_sample,
-                    bandwidths,
-                    mode="unbounded",
-                    grid_size=DEFAULT_GRID_SIZE,
-                )
-            st.session_state["user_result"] = {
-                "sample": current_sample.copy(),
-                "support": support,
-                "bandwidths": bandwidths,
-                "neural_result": neural_result,
-                "bounded_results": bounded_results,
-                "unbounded_results": unbounded_results,
-            }
-        except Exception as error:
-            st.error(f"Could not generate the comparison: {error}")
+            except ValueError as error:
+                support_error = str(error)
 
-    if "user_result" in st.session_state:
-        render_user_result(st.session_state["user_result"])
+        if support_error:
+            st.error(support_error)
+
+        support_signature = (
+            None
+            if support is None
+            else (float(support[0]), float(support[1]))
+        )
+        current_user_signature = (
+            int(st.session_state.get("confirmed_sample_revision", 0)),
+            distribution_status,
+            selected_family_label,
+            neural_selector_name,
+            tuple(selected_methods),
+            support_signature,
+        )
+
+        generate_user_result = st.button(
+            "Generate KDE comparison",
+            type="primary",
+            use_container_width=True,
+            disabled=(
+                support is None
+                or bool(support_error)
+                or not selected_methods
+            ),
+        )
+        if generate_user_result:
+            try:
+                with st.spinner(
+                    "Selecting bandwidths and evaluating KDE curves..."
+                ):
+                    bandwidths, neural_result = compute_selected_bandwidths(
+                        current_sample,
+                        selected_methods,
+                        neural_selector_name=neural_selector_name,
+                        working_support=support,
+                    )
+                    bounded_results = estimate_multiple_kdes(
+                        current_sample,
+                        bandwidths,
+                        mode="bounded",
+                        support=support,
+                        grid_size=DEFAULT_GRID_SIZE,
+                    )
+                    unbounded_results = estimate_multiple_kdes(
+                        current_sample,
+                        bandwidths,
+                        mode="unbounded",
+                        grid_size=DEFAULT_GRID_SIZE,
+                    )
+                st.session_state["user_result"] = {
+                    "config_signature": current_user_signature,
+                    "sample": current_sample.copy(),
+                    "support": support,
+                    "bandwidths": bandwidths,
+                    "neural_result": neural_result,
+                    "bounded_results": bounded_results,
+                    "unbounded_results": unbounded_results,
+                }
+            except Exception as error:
+                st.error(f"Could not generate the comparison: {error}")
+
+        saved_user_result = st.session_state.get("user_result")
+        if saved_user_result is not None:
+            if saved_user_result.get("config_signature") == current_user_signature:
+                render_user_result(saved_user_result)
+            else:
+                st.info(
+                    "The analysis settings changed. Generate the comparison "
+                    "again to update the result."
+                )
+
 
 else:
-    render_paper_benchmarks()
+    render_benchmarks()
+
     st.divider()
     st.header("Interactive single-task simulation")
     st.write(
@@ -1765,25 +1748,15 @@ else:
             "KDEs are evaluated on the real line."
         )
     elif simulation_kind == "Distribution family":
-        family_input_column, family_request_column = st.columns([3.0, 1.0])
-        with family_input_column:
-            selected_family = st.selectbox(
-                "Underlying distribution",
-                MULTIFAMILY_OPTIONS,
-            )
-        with family_request_column:
-            st.write("")
-            st.write("")
-            st.link_button(
-                "Request another distribution",
-                ISSUE_URL,
-                use_container_width=True,
-            )
+        selected_family = st.selectbox(
+            "Underlying distribution",
+            MULTIFAMILY_OPTIONS,
+        )
         st.caption(
             "“Multi-family” draws one of the ten training families uniformly "
-            "for this task; it does not average ten densities into a new mixture. "
-            "A new continuous one-dimensional family can use the existing GMM "
-            "K=32 selector once its sampler and true density are implemented."
+            "for this task; it does not average ten densities into a new "
+            "mixture. Use the request link in the benchmark section to suggest "
+            "another simulation family."
         )
     else:
         st.caption(
@@ -1805,6 +1778,21 @@ else:
             "Exact Sheather–Jones requires Rscript. Add `r-base-core` to "
             "`packages.txt` for Streamlit Community Cloud."
         )
+
+    simulation_signature = (
+        simulation_kind,
+        int(simulation_n),
+        int(simulation_seed),
+        int(test_size),
+        (
+            float(gaussian_mean),
+            float(gaussian_standard_deviation),
+        )
+        if simulation_kind == "Gaussian"
+        else None,
+        selected_family if simulation_kind == "Distribution family" else None,
+        tuple(simulation_methods),
+    )
 
     generate_simulation = st.button(
         "Generate and evaluate simulation",
@@ -1837,20 +1825,23 @@ else:
                         simulation_n,
                         int(test_size),
                     )
-                st.session_state["simulation_result"] = run_simulation(
+                simulation_result = run_simulation(
                     task, simulation_methods
                 )
+                simulation_result["config_signature"] = simulation_signature
+                st.session_state["simulation_result"] = simulation_result
         except Exception as error:
             st.error(f"Could not run the simulation: {error}")
 
-    if "simulation_result" in st.session_state:
-        render_simulation_result(st.session_state["simulation_result"])
-
-
-st.divider()
-st.caption(
-    "The automatic interval follows A = x_min - R/(n-1) and "
-    "B = x_max + R/(n-1), where R is the observed range. It is used as a "
-    "sample-adaptive working interval and should not be interpreted as a "
-    "general estimator of mathematical support."
-)
+    saved_simulation_result = st.session_state.get("simulation_result")
+    if saved_simulation_result is not None:
+        if (
+            saved_simulation_result.get("config_signature")
+            == simulation_signature
+        ):
+            render_simulation_result(saved_simulation_result)
+        else:
+            st.info(
+                "The simulation settings changed. Generate the task again to "
+                "update the result."
+            )
