@@ -2,13 +2,14 @@
 
 The application has two workflows:
 
-1. ``Your data`` compares selected bandwidth methods on an uploaded or pasted
-   one-dimensional sample.  It displays both bounded and ordinary unbounded
-   Gaussian KDEs on shared grids.
-2. ``Simulation`` generates a fresh task from the Gaussian, multi-family, or
-   bounded GMM K=32 setup used by the project.  It overlays the true density,
-   estimates the KDEs, and evaluates empirical negative log2 score on an
-   independent test sample.
+1. ``Data`` compares selected bandwidth methods on an uploaded or pasted
+   one-dimensional sample.  A known/unknown family choice selects the matched
+   amortized checkpoint.  The page displays both bounded and ordinary
+   unbounded Gaussian KDEs on shared grids.
+2. ``Simulation`` first presents the paper's three aggregate benchmark areas,
+   then optionally generates a fresh task from the Gaussian, multi-family, or
+   bounded GMM K=32 setup.  The single-task result overlays the true density
+   and evaluates empirical negative log2 score on an independent test sample.
 
 Every classical selector follows the same explicit affine comparison route as
 the neural selectors: map the working support to ``[-1, 1]``, select a
@@ -24,6 +25,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional
+from urllib.parse import urlencode
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,7 +54,7 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-01 · benchmark-layout-v3"
+APP_REVISION = "2026-09-01 · hierarchical-data-simulation-v4"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
 
@@ -105,6 +107,11 @@ MULTIFAMILY_OPTIONS = (
     *FAMILY_LABELS.values(),
 )
 FAMILY_FROM_LABEL = {label: key for key, label in FAMILY_LABELS.items()}
+
+DATA_FAMILY_OPTIONS = (
+    *FAMILY_LABELS.values(),
+    "Other / request another distribution",
+)
 
 # Web-display copies of the paper figures.  Keep the corresponding EPS files
 # under the same stems for archival/download purposes; Streamlit displays PNG.
@@ -1004,7 +1011,7 @@ def render_benchmark_figure(
     """Display a browser-friendly copy of one existing paper figure."""
 
     st.subheader(title)
-    image_path = FIGURE_DIR / filename
+    image_path = resolve_benchmark_asset(filename)
     if image_path.is_file():
         st.image(
             str(image_path),
@@ -1013,17 +1020,33 @@ def render_benchmark_figure(
         )
         return
 
-    eps_path = image_path.with_suffix(".eps")
+    eps_path = resolve_benchmark_asset(Path(filename).with_suffix(".eps").name)
     if eps_path.is_file():
         st.warning(
             f"Found `{eps_path.name}`, but browsers do not reliably render EPS. "
-            f"Export the same figure as `{filename}` and place it in `figures/`."
+            f"Export the same figure as `{filename}`."
         )
     else:
         st.info(
-            f"Add `{filename}` to the repository's `figures/` directory. "
-            "The matching EPS file may be stored beside it using the same stem."
+            f"Add `{filename}` to either the repository root or its `figures/` "
+            "directory. The matching EPS file may be stored beside it using "
+            "the same stem."
         )
+
+
+def resolve_benchmark_asset(filename: str) -> Path:
+    """Find a paper figure in ``figures/`` or the repository root.
+
+    ``figures/`` is preferred for a tidy repository, while the root fallback
+    keeps existing deployments working when figures were uploaded beside
+    ``app.py``.
+    """
+
+    candidates = (FIGURE_DIR / filename, APP_DIR / filename)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
 
 
 def render_paper_benchmarks() -> None:
@@ -1080,7 +1103,7 @@ def render_paper_benchmarks() -> None:
             f"for {selected_benchmark_family} tasks."
         )
     )
-    image_path = FIGURE_DIR / selected_family_figure
+    image_path = resolve_benchmark_asset(selected_family_figure)
     if image_path.is_file():
         st.image(
             str(image_path),
@@ -1088,7 +1111,9 @@ def render_paper_benchmarks() -> None:
             use_container_width=True,
         )
     else:
-        eps_path = image_path.with_suffix(".eps")
+        eps_path = resolve_benchmark_asset(
+            Path(selected_family_figure).with_suffix(".eps").name
+        )
         if eps_path.is_file():
             st.warning(
                 f"Found `{eps_path.name}`, but the webpage also needs "
@@ -1096,8 +1121,8 @@ def render_paper_benchmarks() -> None:
             )
         else:
             st.info(
-                f"Add `{selected_family_figure}` to the repository's "
-                "`figures/` directory."
+                f"Add `{selected_family_figure}` to the repository root or "
+                "its `figures/` directory."
             )
     st.caption(
         "Multi-family means that tasks are drawn equally from the ten listed "
@@ -1346,13 +1371,15 @@ optimizing the logarithmic score. Once trained, it predicts a bandwidth
 directly, without requiring a new optimization or bandwidth search for each
 sample.
 
-The deployed model is the GMM K=32 selector. For a one-dimensional sample of
-size 5–256, it uses five features—sample size, mean, sample standard deviation,
-skewness, and kurtosis—to predict the bandwidth. The predicted bandwidth is
-transferred to the selected bounded interval and used to construct a
-truncated-and-renormalized Gaussian KDE. For convenience, the web interface
-allows the interval to be either specified by the user or generated using a
-sample-adaptive rule.
+For user data with an unknown family, the default deployed model is the GMM
+K=32 selector. When the family is known, the interface instead uses the
+matched Gaussian or Multi-family checkpoint. For a one-dimensional sample of
+size 5–256, the general selectors use five features—sample size, mean, sample
+standard deviation, skewness, and kurtosis—to predict the bandwidth. The
+predicted bandwidth is transferred to the selected bounded interval and used
+to construct a truncated-and-renormalized Gaussian KDE. For convenience, the
+web interface allows the interval to be either specified by the user or
+generated using a sample-adaptive rule.
 """
 )
 
@@ -1381,10 +1408,10 @@ with st.sidebar:
     st.caption(f"App revision: `{APP_REVISION}`")
     app_mode = st.radio(
         "Choose a workflow",
-        ("Your data", "Paper benchmarks", "Interactive simulation"),
+        ("Data", "Simulation"),
         help=(
-            "Compare KDEs on your data, inspect the paper's aggregate "
-            "log-score results, or generate one new task with known truth."
+            "Use Data for your own observations. Use Simulation to inspect "
+            "the paper benchmarks and generate a new task with known truth."
         ),
     )
     st.divider()
@@ -1402,17 +1429,12 @@ with st.sidebar:
             st.write(f"{marker} `{checkpoint_name}`")
 
 
-if app_mode == "Your data":
+if app_mode == "Data":
     st.header("Compare methods on your data")
     st.write(
-        "Paste values or upload a CSV/TXT file. If both are supplied, the "
-        "uploaded file is used. Numeric CSV cells are flattened row by row."
-    )
-    st.info(
-        "The true underlying density is unknown in this workflow, so the app "
-        "compares the resulting KDE curves and bandwidths rather than claiming "
-        "a true-distribution log score. The bounded and unbounded panels use "
-        "the same selected bandwidth for each method."
+        "Paste values or upload a CSV/TXT file, confirm the sample, and then "
+        "tell the app whether its underlying distribution family is known. "
+        "If both text and a file are supplied, the uploaded file is used."
     )
 
     input_left, input_right = st.columns(2)
@@ -1432,26 +1454,130 @@ if app_mode == "Your data":
             "treated as sample observations."
         )
 
-    sample_error: Optional[str] = None
-    try:
-        if uploaded_file is not None:
-            current_sample = read_uploaded_samples(uploaded_file)
-        else:
-            current_sample = parse_manual_samples(manual_text)
-        if current_sample.size:
-            current_sample = validate_sample(current_sample)
-    except ValueError as error:
-        current_sample = np.asarray([], dtype=np.float64)
-        sample_error = str(error)
+    confirm_sample = st.button(
+        "Confirm sample",
+        type="primary",
+        use_container_width=True,
+        help=(
+            "Read and validate the current pasted values or uploaded file "
+            "before showing the distribution and KDE settings."
+        ),
+    )
+    if confirm_sample:
+        try:
+            if uploaded_file is not None:
+                parsed_sample = read_uploaded_samples(uploaded_file)
+            else:
+                parsed_sample = parse_manual_samples(manual_text)
+            parsed_sample = validate_sample(parsed_sample)
+            st.session_state["confirmed_user_sample"] = parsed_sample.copy()
+            st.session_state.pop("user_result", None)
+            st.session_state.pop("user_sample_error", None)
+        except ValueError as error:
+            st.session_state.pop("confirmed_user_sample", None)
+            st.session_state.pop("user_result", None)
+            st.session_state["user_sample_error"] = str(error)
 
+    sample_error = st.session_state.get("user_sample_error")
+    current_sample = np.asarray(
+        st.session_state.get("confirmed_user_sample", []),
+        dtype=np.float64,
+    )
     if sample_error:
         st.error(sample_error)
     elif current_sample.size:
         st.success(
-            f"Read {current_sample.size} observations from "
+            f"Confirmed {current_sample.size} observations from "
             f"{format_number(current_sample.min())} to "
             f"{format_number(current_sample.max())}."
         )
+        st.caption(
+            "If you edit the pasted values or replace the uploaded file, "
+            "click **Confirm sample** again before generating the comparison."
+        )
+    else:
+        st.caption(
+            "Enter or upload at least five observations, then click "
+            "**Confirm sample** to continue."
+        )
+
+    if not current_sample.size:
+        st.stop()
+
+    st.subheader("Underlying distribution information")
+    distribution_knowledge = st.radio(
+        "Do you know the underlying distribution family?",
+        ("Unknown", "Known"),
+        horizontal=True,
+        help=(
+            "This choice determines which trained amortized selector is used. "
+            "It does not change the three classical selectors."
+        ),
+    )
+
+    selected_data_family: Optional[str] = None
+    requested_distribution = ""
+    if distribution_knowledge == "Known":
+        selected_data_family = st.selectbox(
+            "Select the underlying distribution family",
+            DATA_FAMILY_OPTIONS,
+        )
+        if selected_data_family == "Other / request another distribution":
+            requested_distribution = st.text_input(
+                "Distribution name or short description",
+                placeholder="For example: Weibull(shape=2), or a custom family",
+            )
+            request_parameters = {
+                "title": (
+                    "Distribution request"
+                    if not requested_distribution.strip()
+                    else f"Distribution request: {requested_distribution.strip()}"
+                ),
+                "body": (
+                    "Requested distribution or description:\n\n"
+                    f"{requested_distribution.strip()}\n\n"
+                    "Please add any desired parameter ranges or simulation "
+                    "details."
+                ),
+            }
+            st.link_button(
+                "Request this distribution",
+                f"{ISSUE_URL}?{urlencode(request_parameters)}",
+                use_container_width=True,
+            )
+
+    if distribution_knowledge == "Unknown":
+        user_neural_selector_name = "gmm32"
+        selector_reason = (
+            "The GMM K=32 selector is used as the general-purpose choice "
+            "when the family is unknown."
+        )
+    elif selected_data_family == "Gaussian":
+        user_neural_selector_name = "gaussian"
+        selector_reason = (
+            "The Gaussian-trained selector is used because Gaussian was "
+            "selected as the known family."
+        )
+    elif selected_data_family == "Other / request another distribution":
+        user_neural_selector_name = "gmm32"
+        selector_reason = (
+            "The GMM K=32 selector is used for the requested/custom family "
+            "until a dedicated or matched selector is available."
+        )
+    else:
+        user_neural_selector_name = "multifamily"
+        selector_reason = (
+            "The Multi-family selector is used because the selected family "
+            "belongs to its ten-family training collection."
+        )
+
+    st.info(
+        f"**Amortized checkpoint:** "
+        f"{NEURAL_LABELS[user_neural_selector_name]}. {selector_reason} "
+        "For uploaded data, selecting a family does not identify unknown "
+        "distribution parameters, so the app compares KDE curves and "
+        "bandwidths without claiming a true-density log score."
+    )
 
     option_left, option_right = st.columns(2)
     with option_left:
@@ -1535,7 +1661,7 @@ if app_mode == "Your data":
                 bandwidths, neural_result = compute_selected_bandwidths(
                     current_sample,
                     selected_methods,
-                    neural_selector_name="gmm32",
+                    neural_selector_name=user_neural_selector_name,
                     working_support=support,
                 )
                 bounded_results = estimate_multiple_kdes(
@@ -1565,16 +1691,9 @@ if app_mode == "Your data":
     if "user_result" in st.session_state:
         render_user_result(st.session_state["user_result"])
 
-
-elif app_mode == "Paper benchmarks":
+else:
     render_paper_benchmarks()
     st.divider()
-    st.info(
-        "To generate a fresh sample and compare its density estimates, choose "
-        "`Interactive simulation` in the sidebar."
-    )
-
-else:
     st.header("Interactive single-task simulation")
     st.write(
         "Generate one new random task from a known underlying distribution, "
