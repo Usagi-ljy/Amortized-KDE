@@ -37,7 +37,7 @@ from classical_bandwidth_selectors import (
     sheather_jones_is_available,
 )
 from kde_estimators import KDEResult, estimate_multiple_kdes
-from kde_plotting import plot_kde_comparison, plot_log_score_comparison
+from kde_plotting import plot_kde_comparison
 from neural_bandwidth_selectors import (
     NeuralBandwidthResult,
     NeuralBandwidthSelector,
@@ -48,8 +48,13 @@ from neural_bandwidth_selectors import (
 # Application constants
 # ---------------------------------------------------------------------------
 
-APP_TITLE = "Amortized Bandwidth Learning for Kernel Density Estimation"
+APP_TITLE = (
+    "Amortized Bandwidth Learning for Kernel Density Estimation "
+    "under Logarithmic Score"
+)
+APP_REVISION = "2026-09-01 · benchmark-layout-v3"
 APP_DIR = Path(__file__).resolve().parent
+FIGURE_DIR = APP_DIR / "figures"
 
 PAPER_URL = "https://arxiv.org/abs/2608.20445"
 GITHUB_URL = "https://github.com/Usagi-ljy/Amortized-KDE"
@@ -100,6 +105,24 @@ MULTIFAMILY_OPTIONS = (
     *FAMILY_LABELS.values(),
 )
 FAMILY_FROM_LABEL = {label: key for key, label in FAMILY_LABELS.items()}
+
+# Web-display copies of the paper figures.  Keep the corresponding EPS files
+# under the same stems for archival/download purposes; Streamlit displays PNG.
+GAUSSIAN_BENCHMARK_FIGURE = "gaussian_benchmark.png"
+MULTIFAMILY_BENCHMARK_FIGURES = {
+    "Multi-family": "multifamily_benchmark.png",
+    "Gaussian": "family_gaussian_benchmark.png",
+    "Laplace": "family_laplace_benchmark.png",
+    "Student-t": "family_student_t_benchmark.png",
+    "Gamma": "family_gamma_benchmark.png",
+    "Beta": "family_beta_benchmark.png",
+    "Logistic": "family_logistic_benchmark.png",
+    "Lognormal": "family_lognormal_benchmark.png",
+    "Bimodal": "family_bimodal_benchmark.png",
+    "Trimodal": "family_trimodal_benchmark.png",
+    "Spike-and-slab": "family_spike_slab_benchmark.png",
+}
+GMM32_BENCHMARK_FIGURE = "gmm32_benchmark.png"
 
 
 st.set_page_config(
@@ -972,6 +995,128 @@ def bandwidth_table(
     return pd.DataFrame(rows)
 
 
+def render_benchmark_figure(
+    filename: str,
+    *,
+    title: str,
+    caption: str,
+) -> None:
+    """Display a browser-friendly copy of one existing paper figure."""
+
+    st.subheader(title)
+    image_path = FIGURE_DIR / filename
+    if image_path.is_file():
+        st.image(
+            str(image_path),
+            caption=caption,
+            use_container_width=True,
+        )
+        return
+
+    eps_path = image_path.with_suffix(".eps")
+    if eps_path.is_file():
+        st.warning(
+            f"Found `{eps_path.name}`, but browsers do not reliably render EPS. "
+            f"Export the same figure as `{filename}` and place it in `figures/`."
+        )
+    else:
+        st.info(
+            f"Add `{filename}` to the repository's `figures/` directory. "
+            "The matching EPS file may be stored beside it using the same stem."
+        )
+
+
+def render_paper_benchmarks() -> None:
+    """Show the three paper benchmark areas before the interactive simulator."""
+
+    st.header("Benchmark results from the paper")
+    st.write(
+        "These figures summarize repeated experiments across sample sizes. "
+        "They are the aggregate benchmark results reported in the paper, not "
+        "results recalculated from a single browser-generated sample. Shaded "
+        "bands show 90% bootstrap intervals."
+    )
+
+    render_benchmark_figure(
+        GAUSSIAN_BENCHMARK_FIGURE,
+        title="1. Gaussian benchmark",
+        caption=(
+            "Empirical logarithmic score versus sample size under Gaussian "
+            "sampling. Scores are averaged over 30,000 independent samples at "
+            "each sample size; lower is better."
+        ),
+    )
+
+    st.subheader("2. Distribution-family benchmark")
+    selector_column, request_column = st.columns([3.0, 1.0])
+    with selector_column:
+        selected_benchmark_family = st.selectbox(
+            "Underlying distribution shown in the benchmark figure",
+            tuple(MULTIFAMILY_BENCHMARK_FIGURES),
+            help=(
+                "Multi-family is the equal-weight aggregate across the ten "
+                "families. The other choices display family-specific results."
+            ),
+        )
+    with request_column:
+        st.write("")
+        st.write("")
+        st.link_button(
+            "Request another distribution",
+            ISSUE_URL,
+            use_container_width=True,
+        )
+
+    selected_family_figure = MULTIFAMILY_BENCHMARK_FIGURES[
+        selected_benchmark_family
+    ]
+    family_caption = (
+        "Empirical logarithmic score versus sample size under bounded "
+        "multi-family sampling on [-1, 1], averaged equally across the ten "
+        "families."
+        if selected_benchmark_family == "Multi-family"
+        else (
+            "Family-specific empirical logarithmic score versus sample size "
+            f"for {selected_benchmark_family} tasks."
+        )
+    )
+    image_path = FIGURE_DIR / selected_family_figure
+    if image_path.is_file():
+        st.image(
+            str(image_path),
+            caption=family_caption,
+            use_container_width=True,
+        )
+    else:
+        eps_path = image_path.with_suffix(".eps")
+        if eps_path.is_file():
+            st.warning(
+                f"Found `{eps_path.name}`, but the webpage also needs "
+                f"`{selected_family_figure}` for browser display."
+            )
+        else:
+            st.info(
+                f"Add `{selected_family_figure}` to the repository's "
+                "`figures/` directory."
+            )
+    st.caption(
+        "Multi-family means that tasks are drawn equally from the ten listed "
+        "families; it is not a density formed by averaging ten distributions. "
+        "A requested distribution can be evaluated with the existing GMM K=32 "
+        "selector once its sampler and true density are added to the simulator."
+    )
+
+    render_benchmark_figure(
+        GMM32_BENCHMARK_FIGURE,
+        title="3. Bounded GMM K=32 benchmark",
+        caption=(
+            "Empirical logarithmic score versus sample size under bounded "
+            "K=32 GMM sampling on [-1, 1]. Scores are averaged over 30,000 "
+            "independent GMM tasks at each sample size; lower is better."
+        ),
+    )
+
+
 def render_neural_details(neural_result: Optional[NeuralBandwidthResult]) -> None:
     if neural_result is None:
         return
@@ -1098,31 +1243,38 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
     metric_columns[1].metric("Independent test sample", int(task.test.size))
     metric_columns[2].metric("Selected methods", len(bandwidths))
 
-    density_column, score_column = st.columns([1.25, 1.0])
-    with density_column:
-        density_figure = plot_kde_comparison(
-            curves,
-            samples=task.observed,
-            true_density=true_density,
-            true_density_label="True underlying density",
-            show_histogram=False,
-            show_rug=True,
-            title=f"{task.title}: density comparison",
-        )
-        st.pyplot(density_figure, clear_figure=True, use_container_width=True)
-        plt.close(density_figure)
-    with score_column:
-        score_figure = plot_log_score_comparison(
-            scores,
-            title="Empirical negative log₂ score",
-            ylabel="Negative log₂ score (bits; lower is better)",
-        )
-        st.pyplot(score_figure, clear_figure=True, use_container_width=True)
-        plt.close(score_figure)
+    density_figure = plot_kde_comparison(
+        curves,
+        samples=task.observed,
+        true_density=true_density,
+        true_density_label="True underlying density",
+        show_histogram=False,
+        show_rug=True,
+        title="Density estimates for this generated task",
+        figure_size=(10.5, 5.4),
+    )
+    st.pyplot(density_figure, clear_figure=True, use_container_width=True)
+    plt.close(density_figure)
 
-    st.caption(
-        "Log scores are calculated on a newly generated independent test "
-        "sample from the same underlying task. Lower is better."
+    if task.kde_mode == "unbounded":
+        st.caption(
+            "The horizontal range is only a finite display window for an "
+            "unbounded density; it is not a support boundary and the KDE is "
+            "not truncated there."
+        )
+    else:
+        st.caption(
+            "The true distribution and all bounded KDEs are supported on "
+            f"[{format_number(task.working_support[0])}, "
+            f"{format_number(task.working_support[1])}] and are normalized on "
+            "that interval."
+        )
+
+    st.markdown("#### Numerical results for this generated task")
+    st.write(
+        "The bandwidth is selected from the observed sample. The empirical "
+        "logarithmic score is then evaluated on the independent test sample "
+        "and is not used to fit the bandwidth. Lower values are better."
     )
     table = bandwidth_table(bandwidths, scores=scores)
     st.dataframe(
@@ -1176,10 +1328,45 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
 
 
 st.title(APP_TITLE)
+st.caption(f"Web app revision: {APP_REVISION}")
 st.markdown(
-    "Compare the published amortized bandwidth selectors with Silverman, "
-    "Sheather–Jones, and least-squares cross-validation (LSCV), using either "
-    "your own one-dimensional data or a newly generated simulation task."
+    f"""
+📄 **Paper:** [Amortized Bandwidth Learning for Kernel Density Estimation
+under Logarithmic Score]({PAPER_URL})  
+**Preprint:** [arXiv:2608.20445]({PAPER_URL})
+"""
+)
+
+st.markdown(
+    """
+This web application demonstrates the amortized bandwidth-selection framework
+proposed in the paper. The framework learns the mapping from a finite sample
+to a KDE bandwidth across a distribution of density-estimation tasks by
+optimizing the logarithmic score. Once trained, it predicts a bandwidth
+directly, without requiring a new optimization or bandwidth search for each
+sample.
+
+The deployed model is the GMM K=32 selector. For a one-dimensional sample of
+size 5–256, it uses five features—sample size, mean, sample standard deviation,
+skewness, and kurtosis—to predict the bandwidth. The predicted bandwidth is
+transferred to the selected bounded interval and used to construct a
+truncated-and-renormalized Gaussian KDE. For convenience, the web interface
+allows the interval to be either specified by the user or generated using a
+sample-adaptive rule.
+"""
+)
+
+st.markdown(
+    """
+The extended comparison keeps this original workflow and adds three classical
+bandwidth selectors—Silverman, Sheather–Jones, and least-squares
+cross-validation (LSCV)—together with an ordinary unbounded KDE view. The
+simulation workflow uses the matched Gaussian and Multi-family checkpoints for
+their respective settings, while the GMM K=32 selector remains the default for
+user data with an unknown distribution family. Paper benchmark figures and
+single-task simulations are presented separately so that aggregate trends are
+not confused with one random realization.
+"""
 )
 
 link_columns = st.columns([1, 1, 1, 3])
@@ -1191,10 +1378,14 @@ link_columns[2].link_button(
 
 with st.sidebar:
     st.header("KDE comparison")
+    st.caption(f"App revision: `{APP_REVISION}`")
     app_mode = st.radio(
         "Choose a workflow",
-        ("Your data", "Simulation"),
-        help="Use your own observations, or generate a task with known truth.",
+        ("Your data", "Paper benchmarks", "Interactive simulation"),
+        help=(
+            "Compare KDEs on your data, inspect the paper's aggregate "
+            "log-score results, or generate one new task with known truth."
+        ),
     )
     st.divider()
     st.caption(
@@ -1216,6 +1407,12 @@ if app_mode == "Your data":
     st.write(
         "Paste values or upload a CSV/TXT file. If both are supplied, the "
         "uploaded file is used. Numeric CSV cells are flattened row by row."
+    )
+    st.info(
+        "The true underlying density is unknown in this workflow, so the app "
+        "compares the resulting KDE curves and bandwidths rather than claiming "
+        "a true-distribution log score. The bounded and unbounded panels use "
+        "the same selected bandwidth for each method."
     )
 
     input_left, input_right = st.columns(2)
@@ -1369,12 +1566,26 @@ if app_mode == "Your data":
         render_user_result(st.session_state["user_result"])
 
 
+elif app_mode == "Paper benchmarks":
+    render_paper_benchmarks()
+    st.divider()
+    st.info(
+        "To generate a fresh sample and compare its density estimates, choose "
+        "`Interactive simulation` in the sidebar."
+    )
+
 else:
-    st.header("Generate a simulation task")
+    st.header("Interactive single-task simulation")
     st.write(
-        "Generate new observations from a known underlying distribution, then "
-        "compare the selected KDEs with the true density and evaluate them on "
-        "an independent test sample."
+        "Generate one new random task from a known underlying distribution, "
+        "then compare the selected KDEs with its true density. This section "
+        "illustrates one concrete sample and should not be interpreted as the "
+        "aggregate benchmark trend reported above."
+    )
+    st.write(
+        "The observed sample is used to select each bandwidth and construct "
+        "the KDE. A separate independent test sample is used only to report "
+        "the empirical logarithmic score in the result table."
     )
 
     simulation_kind = st.radio(
@@ -1390,6 +1601,7 @@ else:
             MIN_SAMPLE_SIZE,
             MAX_SAMPLE_SIZE,
             64,
+            help="Number of observations used to select bandwidths and fit KDEs.",
         )
     with parameter_middle:
         simulation_seed = st.number_input(
@@ -1398,12 +1610,17 @@ else:
             max_value=2_147_483_647,
             value=2026,
             step=1,
+            help="Use the same seed to reproduce exactly the same generated task.",
         )
     with parameter_right:
         test_size = st.select_slider(
             "Independent test size",
             options=(512, 1024, 2048, 4096),
             value=DEFAULT_TEST_SIZE,
+            help=(
+                "Independent observations used only for empirical log-score "
+                "evaluation; they are not used to choose bandwidths."
+            ),
         )
 
     gaussian_mean = 0.0
@@ -1429,13 +1646,25 @@ else:
             "KDEs are evaluated on the real line."
         )
     elif simulation_kind == "Distribution family":
-        selected_family = st.selectbox(
-            "Underlying distribution",
-            MULTIFAMILY_OPTIONS,
-        )
+        family_input_column, family_request_column = st.columns([3.0, 1.0])
+        with family_input_column:
+            selected_family = st.selectbox(
+                "Underlying distribution",
+                MULTIFAMILY_OPTIONS,
+            )
+        with family_request_column:
+            st.write("")
+            st.write("")
+            st.link_button(
+                "Request another distribution",
+                ISSUE_URL,
+                use_container_width=True,
+            )
         st.caption(
             "“Multi-family” draws one of the ten training families uniformly "
-            "for this task; it does not average ten densities into a new mixture."
+            "for this task; it does not average ten densities into a new mixture. "
+            "A new continuous one-dimensional family can use the existing GMM "
+            "K=32 selector once its sampler and true density are implemented."
         )
     else:
         st.caption(
