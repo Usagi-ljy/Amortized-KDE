@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from kde_estimators import KDEResult
+from .kde_estimators import KDEResult
 
 
 TrueDensity = Union[np.ndarray, Callable[[np.ndarray], np.ndarray]]
@@ -193,4 +193,3 @@ def plot_log_score_comparison(
     axis.set_axisbelow(True)
     fig.tight_layout()
     return fig
-

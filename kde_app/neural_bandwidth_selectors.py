@@ -250,7 +250,7 @@ class NeuralBandwidthSelector:
             base = (
                 Path(checkpoint_directory)
                 if checkpoint_directory is not None
-                else Path(__file__).resolve().parent
+                else Path(__file__).resolve().parents[1] / "models"
             )
             checkpoint_path = base / DEFAULT_CHECKPOINTS[self.selector]
         self.checkpoint_path = Path(checkpoint_path).expanduser().resolve()
@@ -362,4 +362,3 @@ def load_neural_selectors(
             strict_sample_size=strict_sample_size,
         )
     return loaded
-

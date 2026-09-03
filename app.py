@@ -33,13 +33,14 @@ import streamlit as st
 from scipy import optimize, stats
 from scipy.special import logsumexp, ndtr, ndtri
 
-from classical_bandwidth_selectors import (
+from kde_app.analytics import track_event
+from kde_app.classical_bandwidth_selectors import (
     compute_classical_bandwidths,
     sheather_jones_is_available,
 )
-from kde_estimators import KDEResult, estimate_multiple_kdes
-from kde_plotting import plot_kde_comparison
-from neural_bandwidth_selectors import (
+from kde_app.kde_estimators import KDEResult, estimate_multiple_kdes
+from kde_app.kde_plotting import plot_kde_comparison
+from kde_app.neural_bandwidth_selectors import (
     NeuralBandwidthResult,
     NeuralBandwidthSelector,
 )
@@ -53,7 +54,7 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-01 · clean-workflow-v6"
+APP_REVISION = "2026-09-03 · anonymous-analytics-v7"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
 
@@ -1361,6 +1362,11 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
 # ---------------------------------------------------------------------------
 
 
+if "_page_view_tracking_attempted" not in st.session_state:
+    st.session_state["_page_view_tracking_attempted"] = True
+    track_event("page_view", workflow="app")
+
+
 st.title(APP_TITLE)
 st.markdown(
     f"""
@@ -1652,6 +1658,23 @@ if app_mode == "Data":
                     "bounded_results": bounded_results,
                     "unbounded_results": unbounded_results,
                 }
+                tracked_distribution = (
+                    "unknown"
+                    if distribution_status == "Unknown"
+                    else (
+                        "other"
+                        if selected_family_label
+                        == "Other / request another distribution"
+                        else selected_family_label
+                    )
+                )
+                track_event(
+                    "data_kde_generated",
+                    workflow="data",
+                    distribution=tracked_distribution,
+                    sample_size=int(current_sample.size),
+                    methods=selected_methods,
+                )
             except Exception as error:
                 st.error(f"Could not generate the comparison: {error}")
 
@@ -1823,6 +1846,19 @@ else:
                 )
                 simulation_result["config_signature"] = simulation_signature
                 st.session_state["simulation_result"] = simulation_result
+                if simulation_kind == "Distribution family":
+                    tracked_distribution = str(
+                        task.metadata.get("Realized family", selected_family)
+                    )
+                else:
+                    tracked_distribution = simulation_kind
+                track_event(
+                    "simulation_generated",
+                    workflow="simulation",
+                    distribution=tracked_distribution,
+                    sample_size=int(simulation_n),
+                    methods=simulation_methods,
+                )
         except Exception as error:
             st.error(f"Could not run the simulation: {error}")
 

@@ -47,9 +47,9 @@ Simulation mode will generate a fresh task in the browser from a known underlyin
 
 | Experiment type | Available target distributions | Amortized checkpoint |
 | --- | --- | --- |
-| Gaussian | Gaussian task generated under the Gaussian experiment setting | `gaussian_selector.pt` |
-| Distribution family | Gaussian, Laplace, Student-$t$, Gamma, Beta, Logistic, Lognormal, Bimodal, Trimodal, Spike-and-slab, or Multi-family | `multifamily_selector.pt` |
-| GMM $K=32$ | Fresh bounded Gaussian mixture generated under the paper's $K=32$ setting | `gmm32_selector.pt` |
+| Gaussian | Gaussian task generated under the Gaussian experiment setting | `models/gaussian_selector.pt` |
+| Distribution family | Gaussian, Laplace, Student-$t$, Gamma, Beta, Logistic, Lognormal, Bimodal, Trimodal, Spike-and-slab, or Multi-family | `models/multifamily_selector.pt` |
+| GMM $K=32$ | Fresh bounded Gaussian mixture generated under the paper's $K=32$ setting | `models/gmm32_selector.pt` |
 
 In the **Multi-family** option, each task is drawn from one of the ten component families. It is not a new density obtained by mixing all ten families together.
 
@@ -76,8 +76,8 @@ Users will also be able to request tests for additional target distributions thr
 
 The repository includes two standalone training scripts:
 
-- `train_gaussian.py`: Gaussian task generation, $n$-only bandwidth-ratio training and best-checkpoint selection;
-- `train_gmm32.py`: exact bounded GMM $K=32$ generation, five-feature training, EMA validation and best-checkpoint selection.
+- `training/train_gaussian.py`: Gaussian task generation, $n$-only bandwidth-ratio training and best-checkpoint selection;
+- `training/train_gmm32.py`: exact bounded GMM $K=32$ generation, five-feature training, EMA validation and best-checkpoint selection.
 
 Both files are self-contained and do not depend on variables defined in a notebook. Their default settings reproduce the reported training protocols. A small `--quick` mode is provided only to verify that the code executes; it does not reproduce the trained models.
 
@@ -93,9 +93,9 @@ The repository contains three trained selectors.
 
 | File | Training tasks | Input | Network | Inference weights |
 | --- | --- | --- | --- | --- |
-| `gaussian_selector.pt` | Gaussian | sample size $n$ | $1\to4\to4\to1$ | `model_state_dict` |
-| `multifamily_selector.pt` | Ten distribution families | five sample features | $5\to128\to128\to1$ | `ema_model` |
-| `gmm32_selector.pt` | Fresh bounded GMM, $K=32$ | five sample features | $5\to128\to128\to1$ | `ema_model` |
+| `models/gaussian_selector.pt` | Gaussian | sample size $n$ | $1\to4\to4\to1$ | `model_state_dict` |
+| `models/multifamily_selector.pt` | Ten distribution families | five sample features | $5\to128\to128\to1$ | `ema_model` |
+| `models/gmm32_selector.pt` | Fresh bounded GMM, $K=32$ | five sample features | $5\to128\to128\to1$ | `ema_model` |
 
 The Multi-family and GMM selectors use the raw feature vector
 
@@ -208,32 +208,34 @@ For tabular files, all numeric cells are flattened row-by-row into a single one-
 
 ## Repository structure
 
-Current files:
+The deployment entry point and configuration files stay at the repository
+root. Application modules, checkpoints, figures and training scripts are kept
+in separate directories:
 
 ```text
 Amortized-KDE/
 ├── app.py
-├── inference.py
-├── train_gaussian.py
-├── train_gmm32.py
-├── gaussian_selector.pt
-├── multifamily_selector.pt
-├── gmm32_selector.pt
-├── example_multicolumn_sample.csv
+├── README.md
 ├── requirements.txt
-└── README.md
-```
-
-Planned modules:
-
-```text
-models.py                  # Neural-network definitions and checkpoint registry
-kde_methods.py             # Amortized, Silverman, Sheather-Jones and LSCV methods
-distributions.py           # Gaussian, ten-family and GMM task generators
-evaluation.py              # Independent-sample logarithmic-score evaluation
-plotting.py                # Shared colours, legends and density figures
-analytics.py               # Anonymous aggregate usage events
-tests/                     # Loading, positivity, integration and generator tests
+├── packages.txt
+├── kde_app/
+│   ├── __init__.py
+│   ├── analytics.py
+│   ├── classical_bandwidth_selectors.py
+│   ├── neural_bandwidth_selectors.py
+│   ├── kde_estimators.py
+│   └── kde_plotting.py
+├── models/
+│   ├── gaussian_selector.pt
+│   ├── multifamily_selector.pt
+│   └── gmm32_selector.pt
+├── figures/
+│   └── *.png
+├── training/
+│   ├── train_gaussian.py
+│   └── train_gmm32.py
+└── .streamlit/
+    └── secrets.toml.example
 ```
 
 ## Run locally
@@ -254,15 +256,15 @@ Then open the local URL shown by Streamlit, typically [http://localhost:8501](ht
 Run a small execution check:
 
 ```bash
-python3 train_gaussian.py --quick
-python3 train_gmm32.py --quick
+python3 training/train_gaussian.py --quick
+python3 training/train_gmm32.py --quick
 ```
 
 Run the complete default training protocols:
 
 ```bash
-python3 train_gaussian.py
-python3 train_gmm32.py
+python3 training/train_gaussian.py
+python3 training/train_gmm32.py
 ```
 
 The complete GMM training is computationally expensive: its maximum configuration contains 40,000 optimisation steps with 256 fresh GMM tasks per step.

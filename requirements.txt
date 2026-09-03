@@ -1,9 +1,8 @@
-# Python dependencies used by the three reproduction notebooks.
-
+# Web application and training dependencies
+streamlit
 numpy
 pandas
 scipy
 torch
 matplotlib
-ipython
-jupyter
+supabase>=2.0,<3.0
