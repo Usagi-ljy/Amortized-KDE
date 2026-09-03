@@ -54,9 +54,10 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-03 · anonymous-analytics-v7"
+APP_REVISION = "2026-09-03 · anonymous-analytics-v7.1"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
+MODEL_DIR = APP_DIR / "models"
 
 PAPER_URL = "https://arxiv.org/abs/2608.20445"
 GITHUB_URL = "https://github.com/Usagi-ljy/Amortized-KDE"
@@ -290,7 +291,7 @@ def load_neural_selector(selector_name: str) -> NeuralBandwidthSelector:
 
     return NeuralBandwidthSelector(
         selector_name,
-        checkpoint_directory=APP_DIR,
+        checkpoint_directory=MODEL_DIR,
         device="cpu",
         strict_sample_size=True,
     )
