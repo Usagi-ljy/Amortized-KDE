@@ -125,9 +125,9 @@ def render_data_page() -> None:
                 st.caption(
                     "Your current sample can be analysed immediately with the "
                     "general-purpose GMM K=32 selector. Submitting a request "
-                    "only asks for this family to be added to Simulation with "
-                    "reproducible sampling, a true density and log-score "
-                    "evaluation. No sample values are included in the request."
+                    "only asks for this family to be considered for a future "
+                    "repeated-simulation benchmark figure. No sample values "
+                    "are included in the request."
                 )
                 st.link_button(
                     "Request this distribution",

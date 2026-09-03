@@ -12,7 +12,6 @@ from urllib.parse import urlencode
 import numpy as np
 import pandas as pd
 import streamlit as st
-from scipy.special import logsumexp, ndtr
 
 from .classical_bandwidth_selectors import (
     compute_classical_bandwidths,
@@ -22,12 +21,10 @@ from .config import (
     CLASSICAL_METHOD_KEYS,
     FAMILY_FROM_LABEL,
     ISSUE_URL,
-    LOG_2,
     MAX_SAMPLE_SIZE,
     MIN_SAMPLE_SIZE,
     MODEL_DIR,
     NEURAL_LABELS,
-    SQRT_2PI,
 )
 from .kde_estimators import KDEResult
 from .neural_bandwidth_selectors import NeuralBandwidthResult, NeuralBandwidthSelector
@@ -150,8 +147,8 @@ def distribution_request_url(distribution_name: str = "") -> str:
         {
             "title": f"Distribution request: {requested_name}",
             "body": (
-                "Please add the following distribution to the interactive "
-                "simulation workflow.\n\n"
+                "Please add the following distribution to the repeated-"
+                "simulation benchmark.\n\n"
                 f"Distribution: {requested_name}\n\n"
                 "Suggested parameter range or reference:\n"
                 "Additional notes:\n\n"
@@ -223,64 +220,6 @@ def compute_selected_bandwidths(
         bandwidths.update(classical)
 
     return bandwidths, neural_result
-
-
-def kde_log_density_at_points(
-    samples: np.ndarray,
-    points: np.ndarray,
-    bandwidth: float,
-    *,
-    mode: str,
-    support: Optional[tuple[float, float]] = None,
-) -> np.ndarray:
-    """Evaluate Gaussian KDE log density robustly at arbitrary test points."""
-
-    sample = np.asarray(samples, dtype=np.float64)
-    test = np.asarray(points, dtype=np.float64)
-    bandwidth = float(bandwidth)
-    standardised = (test[:, None] - sample[None, :]) / bandwidth
-    log_kernel = -0.5 * standardised**2 - math.log(SQRT_2PI * bandwidth)
-    log_density = logsumexp(log_kernel, axis=1) - math.log(sample.size)
-
-    if mode == "bounded":
-        if support is None:
-            raise ValueError("support is required for a bounded log score.")
-        left, right = support
-        if np.any((test < left) | (test > right)):
-            raise ValueError("A test observation lies outside the bounded support.")
-        component_mass = ndtr((right - sample) / bandwidth) - ndtr(
-            (left - sample) / bandwidth
-        )
-        normalising_constant = float(np.mean(np.maximum(component_mass, 0.0)))
-        if not math.isfinite(normalising_constant) or normalising_constant <= 0.0:
-            raise RuntimeError("The bounded KDE normalising constant is invalid.")
-        log_density -= math.log(normalising_constant)
-    elif mode != "unbounded":
-        raise ValueError("mode must be 'bounded' or 'unbounded'.")
-    return log_density
-
-
-def empirical_log_scores(
-    samples: np.ndarray,
-    test_samples: np.ndarray,
-    bandwidths: Mapping[str, float],
-    *,
-    mode: str,
-    support: Optional[tuple[float, float]],
-) -> dict[str, float]:
-    """Return empirical negative log2 scores; lower values are better."""
-
-    scores: dict[str, float] = {}
-    for method, bandwidth in bandwidths.items():
-        log_density = kde_log_density_at_points(
-            samples,
-            test_samples,
-            bandwidth,
-            mode=mode,
-            support=support,
-        )
-        scores[method] = float(-np.mean(log_density) / LOG_2)
-    return scores
 
 
 def curves_to_frame(

@@ -26,8 +26,8 @@ Score]({PAPER_URL}) · [arXiv:2608.20445]({PAPER_URL})
 )
 st.write(
     "Compare an amortized KDE bandwidth selector with Silverman, "
-    "Sheather–Jones and LSCV on your own sample or on a generated task with "
-    "known truth."
+    "Sheather–Jones and LSCV on your own sample, and explore the repeated-"
+    "experiment benchmark results."
 )
 
 with st.expander("About the method and working interval"):
@@ -66,7 +66,7 @@ with st.sidebar:
     app_mode = st.radio(
         "Workflow",
         ("Data", "Simulation"),
-        help="Use your own observations, or generate a task with known truth.",
+        help="Analyse your own observations or view simulation benchmarks.",
     )
     st.divider()
     st.caption(

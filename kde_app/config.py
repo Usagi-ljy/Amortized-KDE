@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-03 · modular-app-v8"
+APP_REVISION = "2026-09-03 · benchmarks-only-v8.1"
 APP_DIR = Path(__file__).resolve().parents[1]
 FIGURE_DIR = APP_DIR / "figures"
 MODEL_DIR = APP_DIR / "models"
@@ -21,10 +20,6 @@ ISSUE_URL = f"{GITHUB_URL}/issues/new"
 MIN_SAMPLE_SIZE = 5
 MAX_SAMPLE_SIZE = 256
 DEFAULT_GRID_SIZE = 512
-DEFAULT_TEST_SIZE = 2048
-REFERENCE_SUPPORT = (-1.0, 1.0)
-LOG_2 = math.log(2.0)
-SQRT_2PI = math.sqrt(2.0 * math.pi)
 
 METHOD_OPTIONS = (
     "Amortized selector",
@@ -54,10 +49,6 @@ FAMILY_LABELS = {
     "trimodal": "Trimodal Gaussian mixture",
     "spike_slab": "Spike-and-slab",
 }
-MULTIFAMILY_OPTIONS = (
-    "Multi-family (random family)",
-    *FAMILY_LABELS.values(),
-)
 FAMILY_FROM_LABEL = {label: key for key, label in FAMILY_LABELS.items()}
 
 GAUSSIAN_BENCHMARK_FIGURE = "gaussian_benchmark.png"

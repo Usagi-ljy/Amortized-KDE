@@ -2,75 +2,46 @@
 
 This repository provides an interactive implementation of amortized bandwidth selection for one-dimensional kernel density estimation (KDE). Instead of applying a fixed rule or solving a new optimisation problem for every sample, a trained neural selector maps the sample directly to a Gaussian-KDE bandwidth.
 
-The current Streamlit app accepts user-supplied data and uses the final Gaussian-mixture-trained selector (GMM, $K=32$) to construct a truncated-and-renormalised KDE on a finite interval. The project is being extended into an interactive comparison tool covering multiple bandwidth selectors, bounded and unbounded KDEs, and simulated distributions with known targets.
+The Streamlit app compares amortized and classical bandwidth selectors on user-supplied data and displays the repeated-experiment benchmark figures reported by the project.
 
 ## Online demo
 
 [https://amortized-kde.streamlit.app](https://amortized-kde.streamlit.app)
 
-## Current implementation
+## Application workflows
 
-The deployed app currently supports:
+### Data
+
+The Data workflow supports:
 
 - manual sample entry and CSV/TXT upload;
 - a known finite support or an automatic sample-adaptive working interval;
-- bandwidth prediction using the final GMM $K=32$ amortized selector;
-- a truncated-and-renormalised Gaussian KDE;
-- display of the predicted bandwidth, effective interval and numerical integral;
-- download of the estimated density grid as CSV.
+- automatic checkpoint selection from the Gaussian, Multi-family and GMM $K=32$ selectors;
+- Silverman's rule, Sheather–Jones and LSCV comparisons;
+- bounded and ordinary unbounded Gaussian KDE views;
+- download of the estimated density grids as CSV.
 
-## Planned interactive comparison
-
-The next version will add two complementary modes.
-
-### 1. User-data mode
-
-For an uploaded or manually entered sample, users will be able to select one or more bandwidth methods:
+Available bandwidth methods are:
 
 - Amortized selector;
 - Silverman's rule;
 - Sheather–Jones selector;
 - least-squares cross-validation (LSCV).
 
-All selected KDEs will be drawn in the same figure using different colours. They will use the same sample, interval and evaluation grid; only the selected bandwidth will differ. The legend will report the bandwidth returned by each method.
+All selected KDEs are drawn using the same sample and method-specific bandwidths.
 
-Two density views will be available:
+Two density views are available:
 
 - **Bounded KDE:** the Gaussian KDE is truncated and renormalised on $[A,B]$.
 - **Unbounded KDE:** the ordinary Gaussian KDE is defined on $\mathbb R$; only its displayed horizontal range is finite.
 
-Because the underlying distribution of user-supplied data is unknown, this mode will not report a target-based logarithmic score. Its purpose is direct visual comparison of the resulting density estimates.
+Because the full target density and its parameters are not available from an observed sample, this workflow does not report a target-based logarithmic score.
 
-### 2. Simulation mode
+### Simulation
 
-Simulation mode will generate a fresh task in the browser from a known underlying distribution. It will contain three experiment types:
+The Simulation workflow displays only aggregate repeated-experiment figures: the Gaussian benchmark, the ten-family aggregate and family-specific results, and the bounded GMM $K=32$ benchmark. It does not generate or score a single random task in the browser, because one realization is not representative of aggregate method performance.
 
-| Experiment type | Available target distributions | Amortized checkpoint |
-| --- | --- | --- |
-| Gaussian | Gaussian task generated under the Gaussian experiment setting | `models/gaussian_selector.pt` |
-| Distribution family | Gaussian, Laplace, Student-$t$, Gamma, Beta, Logistic, Lognormal, Bimodal, Trimodal, Spike-and-slab, or Multi-family | `models/multifamily_selector.pt` |
-| GMM $K=32$ | Fresh bounded Gaussian mixture generated under the paper's $K=32$ setting | `models/gmm32_selector.pt` |
-
-In the **Multi-family** option, each task is drawn from one of the ten component families. It is not a new density obtained by mixing all ten families together.
-
-For a chosen sample size and random seed, the app will:
-
-1. generate a new observed sample;
-2. display the true target density;
-3. overlay the KDEs selected by the user;
-4. generate an independent scoring sample from the same target;
-5. report the empirical logarithmic score for each method.
-
-For an independent scoring sample $Y_1,\ldots,Y_m$, the reported score will be
-
-$$
-\widehat L(\widehat f)
-=-\frac{1}{m}\sum_{j=1}^{m}\log_2 \widehat f(Y_j),
-$$
-
-measured in bits. Smaller values are better.
-
-Users will also be able to request tests for additional target distributions through a GitHub issue.
+Users may request an additional family-specific benchmark through a GitHub issue. The request does not include uploaded sample data.
 
 ## Reproducible training scripts
 
@@ -81,11 +52,11 @@ The repository includes two standalone training scripts:
 
 Both files are self-contained and do not depend on variables defined in a notebook. Their default settings reproduce the reported training protocols. A small `--quick` mode is provided only to verify that the code executes; it does not reproduce the trained models.
 
-Training outputs are written under `training_outputs/`, so running either script does not overwrite the published checkpoints in the repository root.
+Training outputs are written under `training_outputs/`, so running either script does not overwrite the published checkpoints in `models/`.
 
-## Planned privacy-preserving usage statistics
+## Privacy-preserving usage statistics
 
-The deployed app may record aggregate events such as page visits, approximate anonymous users who successfully generate a KDE, successful generation counts and run times. It will not store uploaded sample values, filenames, IP addresses or other directly identifying information.
+The deployed app records page visits and successful Data-workflow KDE generations using an anonymous per-session identifier. It does not store uploaded sample values, filenames, IP addresses or distribution-request free text.
 
 ## Checkpoints
 
@@ -227,7 +198,6 @@ Amortized-KDE/
 │   ├── neural_bandwidth_selectors.py
 │   ├── kde_estimators.py
 │   ├── kde_plotting.py
-│   ├── simulation_tasks.py
 │   ├── ui_components.py
 │   ├── data_page.py
 │   └── simulation_page.py
@@ -281,7 +251,6 @@ The complete GMM training is computationally expensive: its maximum configuratio
 - The amortized selectors were trained for $5\le n\le256$.
 - The bounded estimator depends on a user-specified or automatically constructed finite interval.
 - The automatic interval is a working rule, not a confidence statement about the true support.
-- Simulation-mode log scores are Monte Carlo estimates and therefore vary with the random seed and scoring-sample size.
 - For user data without a known target distribution, density curves can be compared but a target-based log score is unavailable.
 
 ## Paper

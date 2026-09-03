@@ -24,7 +24,6 @@ from .core import (
 from .kde_estimators import KDEResult
 from .kde_plotting import plot_kde_comparison
 from .neural_bandwidth_selectors import NeuralBandwidthResult
-from .simulation_tasks import SimulationTask
 
 def bandwidth_table(
     bandwidths: Mapping[str, float],
@@ -83,7 +82,7 @@ def render_benchmark_figure(
 
 
 def render_benchmarks() -> None:
-    """Show compact benchmark tabs before the interactive simulator."""
+    """Show the aggregate and family-specific simulation benchmarks."""
 
     st.header("Benchmark results")
     st.write(
@@ -153,8 +152,8 @@ def render_benchmarks() -> None:
         st.caption(
             "Observed data from another one-dimensional continuous "
             "distribution can already be analysed in the Data workflow. A "
-            "request asks for that family to be added to Simulation with a "
-            "sampler, true density and log-score evaluation."
+            "request asks for a future family-specific repeated-simulation "
+            "benchmark and corresponding figure."
         )
         st.link_button(
             "Request another distribution",
@@ -286,95 +285,3 @@ def render_user_result(result: Mapping[str, object]) -> None:
         )
         render_neural_details(result["neural_result"])
 
-
-def render_simulation_result(result: Mapping[str, object]) -> None:
-    task: SimulationTask = result["task"]
-    bandwidths = result["bandwidths"]
-    curves = result["curves"]
-    scores = result["scores"]
-    true_density = np.asarray(result["true_density"], dtype=np.float64)
-
-    st.divider()
-    st.subheader(task.title)
-    metric_columns = st.columns(3)
-    metric_columns[0].metric("Observed sample", int(task.observed.size))
-    metric_columns[1].metric("Independent test sample", int(task.test.size))
-    metric_columns[2].metric("Selected methods", len(bandwidths))
-
-    density_figure = plot_kde_comparison(
-        curves,
-        samples=task.observed,
-        true_density=true_density,
-        true_density_label="True underlying density",
-        show_histogram=False,
-        show_rug=True,
-        title="Density estimates for this generated task",
-        figure_size=(10.5, 5.4),
-    )
-    st.pyplot(density_figure, clear_figure=True, width="stretch")
-    plt.close(density_figure)
-
-    if task.kde_mode == "unbounded":
-        st.caption(
-            "The horizontal range is only a finite display window for an "
-            "unbounded density; it is not a support boundary and the KDE is "
-            "not truncated there."
-        )
-    else:
-        st.caption(
-            "The true distribution and all bounded KDEs are supported on "
-            f"[{format_number(task.working_support[0])}, "
-            f"{format_number(task.working_support[1])}] and are normalized on "
-            "that interval."
-        )
-
-    st.markdown("#### Numerical results for this generated task")
-    st.write(
-        "The bandwidth is selected from the observed sample. The empirical "
-        "logarithmic score is then evaluated on the independent test sample "
-        "and is not used to fit the bandwidth. Lower values are better."
-    )
-    table = bandwidth_table(bandwidths, scores=scores)
-    st.dataframe(
-        table.style.format(
-            {
-                "Bandwidth": "{:.6g}",
-                "Empirical log score (bits)": "{:.6f}",
-            }
-        ),
-        hide_index=True,
-        width="stretch",
-    )
-
-    curve_frame = curves_to_frame(curves, true_density=true_density)
-    score_frame = table[["Method", "Bandwidth", "Empirical log score (bits)"]]
-    download_left, download_right = st.columns(2)
-    download_left.download_button(
-        "Download simulation curves",
-        dataframe_to_csv_bytes(curve_frame),
-        file_name="simulation_kde_curves.csv",
-        mime="text/csv",
-        width="stretch",
-    )
-    download_right.download_button(
-        "Download bandwidths and scores",
-        dataframe_to_csv_bytes(score_frame),
-        file_name="simulation_log_scores.csv",
-        mime="text/csv",
-        width="stretch",
-    )
-
-    with st.expander("Generated-task and selector details"):
-        metadata_frame = pd.DataFrame(
-            {
-                "Setting": list(task.metadata),
-                "Value": [str(value) for value in task.metadata.values()],
-            }
-        )
-        st.dataframe(metadata_frame, hide_index=True, width="stretch")
-        st.markdown(
-            f"**Working interval used for all bandwidth selectors:** "
-            f"`[{format_number(task.working_support[0])}, "
-            f"{format_number(task.working_support[1])}]`"
-        )
-        render_neural_details(result["neural_result"])

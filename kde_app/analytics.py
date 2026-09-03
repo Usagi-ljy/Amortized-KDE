@@ -19,7 +19,6 @@ LOGGER = logging.getLogger(__name__)
 ALLOWED_EVENTS = {
     "page_view",
     "data_kde_generated",
-    "simulation_generated",
 }
 
 
