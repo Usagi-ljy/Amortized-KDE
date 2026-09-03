@@ -221,10 +221,16 @@ Amortized-KDE/
 ├── kde_app/
 │   ├── __init__.py
 │   ├── analytics.py
+│   ├── config.py
+│   ├── core.py
 │   ├── classical_bandwidth_selectors.py
 │   ├── neural_bandwidth_selectors.py
 │   ├── kde_estimators.py
-│   └── kde_plotting.py
+│   ├── kde_plotting.py
+│   ├── simulation_tasks.py
+│   ├── ui_components.py
+│   ├── data_page.py
+│   └── simulation_page.py
 ├── models/
 │   ├── gaussian_selector.pt
 │   ├── multifamily_selector.pt
