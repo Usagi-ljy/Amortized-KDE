@@ -78,9 +78,11 @@ def track_event(
         "methods": None if methods is None else list(methods),
     }
     try:
-        client.table("app_events").insert(payload).execute()
+        client.table("app_events").insert(
+            payload,
+            returning="minimal",
+        ).execute()
         return True
     except Exception:
         LOGGER.exception("Could not record analytics event %s.", event_name)
         return False
-

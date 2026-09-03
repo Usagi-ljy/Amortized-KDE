@@ -54,7 +54,7 @@ APP_TITLE = (
     "Amortized Bandwidth Learning for Kernel Density Estimation "
     "under Logarithmic Score"
 )
-APP_REVISION = "2026-09-03 · anonymous-analytics-v7.1"
+APP_REVISION = "2026-09-03 · anonymous-analytics-v7.2"
 APP_DIR = Path(__file__).resolve().parent
 FIGURE_DIR = APP_DIR / "figures"
 MODEL_DIR = APP_DIR / "models"
@@ -1043,7 +1043,7 @@ def render_benchmark_figure(
         st.image(
             str(image_path),
             caption=caption,
-            use_container_width=True,
+            width="stretch",
         )
         return
 
@@ -1120,7 +1120,7 @@ def render_benchmarks() -> None:
             st.image(
                 str(FIGURE_DIR / selected_family_figure),
                 caption=family_caption,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info(
@@ -1170,7 +1170,7 @@ def render_neural_details(neural_result: Optional[NeuralBandwidthResult]) -> Non
             f"**Predicted bandwidth ratio:** "
             f"`{format_number(neural_result.bandwidth_ratio)}`"
         )
-    st.dataframe(feature_frame, hide_index=True, use_container_width=True)
+    st.dataframe(feature_frame, hide_index=True, width="stretch")
 
 
 def render_user_result(result: Mapping[str, object]) -> None:
@@ -1200,7 +1200,7 @@ def render_user_result(result: Mapping[str, object]) -> None:
             title="Bounded KDE: truncated and renormalized",
             figure_size=(10.5, 5.4),
         )
-        st.pyplot(bounded_figure, clear_figure=True, use_container_width=True)
+        st.pyplot(bounded_figure, clear_figure=True, width="stretch")
         plt.close(bounded_figure)
     with unbounded_tab:
         unbounded_figure = plot_kde_comparison(
@@ -1211,7 +1211,7 @@ def render_user_result(result: Mapping[str, object]) -> None:
             title="Unbounded KDE: ordinary Gaussian kernels",
             figure_size=(10.5, 5.4),
         )
-        st.pyplot(unbounded_figure, clear_figure=True, use_container_width=True)
+        st.pyplot(unbounded_figure, clear_figure=True, width="stretch")
         plt.close(unbounded_figure)
 
     st.caption(
@@ -1233,7 +1233,7 @@ def render_user_result(result: Mapping[str, object]) -> None:
             }
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     download_left, download_right = st.columns(2)
@@ -1244,14 +1244,14 @@ def render_user_result(result: Mapping[str, object]) -> None:
         dataframe_to_csv_bytes(bounded_frame),
         file_name="bounded_kde_comparison.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
     download_right.download_button(
         "Download unbounded density CSV",
         dataframe_to_csv_bytes(unbounded_frame),
         file_name="unbounded_kde_comparison.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
 
     with st.expander("Technical details"):
@@ -1289,7 +1289,7 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
         title="Density estimates for this generated task",
         figure_size=(10.5, 5.4),
     )
-    st.pyplot(density_figure, clear_figure=True, use_container_width=True)
+    st.pyplot(density_figure, clear_figure=True, width="stretch")
     plt.close(density_figure)
 
     if task.kde_mode == "unbounded":
@@ -1321,7 +1321,7 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
             }
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     curve_frame = curves_to_frame(curves, true_density=true_density)
@@ -1332,14 +1332,14 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
         dataframe_to_csv_bytes(curve_frame),
         file_name="simulation_kde_curves.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
     download_right.download_button(
         "Download bandwidths and scores",
         dataframe_to_csv_bytes(score_frame),
         file_name="simulation_log_scores.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
 
     with st.expander("Generated-task and selector details"):
@@ -1349,7 +1349,7 @@ def render_simulation_result(result: Mapping[str, object]) -> None:
                 "Value": [str(value) for value in task.metadata.values()],
             }
         )
-        st.dataframe(metadata_frame, hide_index=True, use_container_width=True)
+        st.dataframe(metadata_frame, hide_index=True, width="stretch")
         st.markdown(
             f"**Working interval used for all bandwidth selectors:** "
             f"`[{format_number(task.working_support[0])}, "
@@ -1409,8 +1409,8 @@ the family is unknown or outside the ten-family collection.
     )
 
 link_columns = st.columns([1, 1, 4])
-link_columns[0].link_button("Read the paper", PAPER_URL, use_container_width=True)
-link_columns[1].link_button("View code on GitHub", GITHUB_URL, use_container_width=True)
+link_columns[0].link_button("Read the paper", PAPER_URL, width="stretch")
+link_columns[1].link_button("View code on GitHub", GITHUB_URL, width="stretch")
 
 with st.sidebar:
     st.header("KDE workflows")
@@ -1453,7 +1453,7 @@ if app_mode == "Data":
         confirm_sample = st.form_submit_button(
             "Confirm sample",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
     if confirm_sample:
@@ -1619,7 +1619,7 @@ if app_mode == "Data":
         generate_user_result = st.button(
             "Generate KDE comparison",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             disabled=(
                 support is None
                 or bool(support_error)
@@ -1814,7 +1814,7 @@ else:
     generate_simulation = st.button(
         "Generate and evaluate simulation",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         disabled=not simulation_methods,
     )
     if generate_simulation:
